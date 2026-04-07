@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+
+# Node
+viewer/frontend/node_modules/
+viewer/frontend/dist/
+*.log
+
+# Environment
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# SQLite DB (ephemeral)
+*.db
+*.db-shm
+*.db-wal
+
+# Specify
+.specify/init-options.json

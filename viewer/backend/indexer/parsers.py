@@ -1,0 +1,174 @@
+"""
+Parsers for PsychDS JSON files.
+
+- parse_dataset_description: reads dataset_description.json
+- parse_provenance: reads provenance.json
+"""
+
+import json
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_str(val) -> str | None:
+    if val is None:
+        return None
+    return str(val)
+
+
+def _extract_authors(author_field) -> str | None:
+    """Convert schema:author array to JSON string of names."""
+    if not author_field:
+        return None
+    if isinstance(author_field, list):
+        names = []
+        for a in author_field:
+            if isinstance(a, dict):
+                name = a.get("schema:name") or a.get("name")
+                if name:
+                    names.append(str(name))
+        return json.dumps(names)
+    return None
+
+
+def _extract_keywords(kw_field) -> str | None:
+    """Convert schema:keywords array to JSON string."""
+    if not kw_field:
+        return None
+    if isinstance(kw_field, list):
+        return json.dumps([str(k) for k in kw_field])
+    if isinstance(kw_field, str):
+        return json.dumps([kw_field])
+    return None
+
+
+def parse_dataset_description(path: Path) -> dict:
+    """
+    Parse dataset_description.json.
+
+    Returns a dict with keys:
+        paper_meta: dict for papers table
+        study_meta: dict for study_groups table
+        variables: list of dicts for variables table
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.error("Failed to parse %s: %s", path, e)
+        return {}
+
+    # Paper-level metadata
+    paper_meta = {
+        "paper_id": str(data.get("metacheck:paper_id", path.parent.parent.name)),
+        "title": _safe_str(data.get("schema:name", "")),
+        "description": _safe_str(data.get("schema:description")),
+        "authors": _extract_authors(data.get("schema:author")),
+        "doi": _safe_str(data.get("schema:identifier")),
+        "keywords": _extract_keywords(data.get("schema:keywords")),
+        "pipeline_version": _safe_str(
+            data.get("metacheck:pipeline_version")
+        ),
+        "conversion_date": _safe_str(data.get("metacheck:conversion_date")),
+    }
+
+    # Study-level metadata
+    pipeline_status = data.get("metacheck:pipeline_status", {}) or {}
+    source_repo = data.get("metacheck:source_repository", {}) or {}
+
+    study_meta = {
+        "study_group": _safe_str(data.get("metacheck:study_group", "")),
+        "title": _safe_str(data.get("schema:name", "")),
+        "description": _safe_str(data.get("schema:description")),
+        "index_success": 1 if pipeline_status.get("index_success") else 0,
+        "codebook_success": 1 if pipeline_status.get("codebook_success") else 0,
+        "n_files_total": pipeline_status.get("n_files_total"),
+        "n_data_files": pipeline_status.get("n_data_files"),
+        "n_columns": pipeline_status.get("n_columns"),
+        "n_labelled_columns": int(pipeline_status.get("n_labelled_columns", 0) or 0),
+        "label_status": _safe_str(pipeline_status.get("label_status")),
+        "shared_resources": _safe_str(data.get("metacheck:shared_resources")),
+        "shared_files": data.get("metacheck:shared_files"),
+        "source_platform": _safe_str(source_repo.get("platform")),
+        "source_download_path": _safe_str(source_repo.get("download_path")),
+        "schema_version": _safe_str(data.get("schema:schemaVersion")),
+    }
+
+    # Variables
+    variables = []
+    for var in data.get("schema:variableMeasured", []) or []:
+        if not isinstance(var, dict):
+            continue
+
+        stats = var.get("metacheck:statistics") or {}
+        variables.append({
+            "name": _safe_str(var.get("name", "")),
+            "description": _safe_str(var.get("description")),
+            "col_type": _safe_str(var.get("metacheck:col_type", "unknown")),
+            "source_file": _safe_str(var.get("metacheck:source_file", "")),
+            "sample_values": _safe_str(var.get("metacheck:sample_values")),
+            "value_pattern": _safe_str(var.get("valuePattern")),
+            "min_value": var.get("minValue"),
+            "max_value": var.get("maxValue"),
+            "stat_n": stats.get("n"),
+            "stat_n_missing": stats.get("n_missing"),
+            "stat_mean": stats.get("mean"),
+            "stat_sd": stats.get("sd"),
+            "stat_se": stats.get("se"),
+            "stat_median": stats.get("median"),
+            "stat_p25": stats.get("p25"),
+            "stat_p75": stats.get("p75"),
+            "stat_iqr": stats.get("iqr"),
+            "stat_skewness": stats.get("skewness"),
+            "stat_kurtosis": stats.get("kurtosis"),
+        })
+
+    return {
+        "paper_meta": paper_meta,
+        "study_meta": study_meta,
+        "variables": variables,
+    }
+
+
+def parse_provenance(path: Path) -> list[dict]:
+    """
+    Parse provenance.json.
+
+    Returns list of dicts for the provenance table.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.error("Failed to parse %s: %s", path, e)
+        return []
+
+    results = []
+    for entry in data.get("file_provenance", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        results.append({
+            "psychds_path": _safe_str(entry.get("psychds_path", "")),
+            "original_rel_path": _safe_str(entry.get("original_rel_path")),
+            "original_format": _safe_str(entry.get("original_format")),
+            "pipeline_type": _safe_str(entry.get("pipeline_type")),
+            "pipeline_group": _safe_str(entry.get("pipeline_group")),
+            "pipeline_data_granularity": _safe_str(
+                entry.get("pipeline_data_granularity")
+            ),
+            "ground_truth_validated": 1 if entry.get("ground_truth_validated") else 0,
+            "txt_extraction_attempted": (
+                1 if entry.get("txt_extraction_attempted") else
+                (0 if "txt_extraction_attempted" in entry else None)
+            ),
+            "txt_extraction_skipped": (
+                1 if entry.get("txt_extraction_skipped") else
+                (0 if "txt_extraction_skipped" in entry else None)
+            ),
+            "txt_skip_reason": _safe_str(entry.get("txt_skip_reason")),
+            "txt_psychds_path": _safe_str(entry.get("txt_psychds_path")),
+        })
+
+    return results

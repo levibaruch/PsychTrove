@@ -1,0 +1,28 @@
+version: "3.9"
+services:
+  backend:
+    build: ./backend
+    volumes:
+      - "${PSYCHDS_DIR}:/data/psychds:ro"
+    environment:
+      - PSYCHDS_DIR=/data/psychds
+      - INDEX_ON_START=${INDEX_ON_START:-true}
+      - INDEX_MAX_WORKERS=${INDEX_MAX_WORKERS:-4}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - VITE_API_BASE=http://localhost:8000
