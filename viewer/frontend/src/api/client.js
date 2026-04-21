@@ -34,8 +34,12 @@ export const api = {
     if (params.col_type) qs.set('col_type', params.col_type)
     if (params.has_description != null) qs.set('has_description', params.has_description)
     if (params.paper_id) qs.set('paper_id', params.paper_id)
-    if (params.limit) qs.set('limit', params.limit)
-    if (params.offset) qs.set('offset', params.offset)
+    if (params.paper_q) qs.set('paper_q', params.paper_q)
+    if (params.min_n != null) qs.set('min_n', params.min_n)
+    if (params.sort_by) qs.set('sort_by', params.sort_by)
+    if (params.sort_dir) qs.set('sort_dir', params.sort_dir)
+    if (params.limit != null) qs.set('limit', params.limit)
+    if (params.offset != null) qs.set('offset', params.offset)
     return request(`/api/variables/search?${qs}`)
   },
 

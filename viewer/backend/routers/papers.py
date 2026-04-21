@@ -10,10 +10,6 @@ from db.schema import get_connection
 router = APIRouter()
 
 
-def _row_to_dict(row) -> dict:
-    return dict(row)
-
-
 def _deserialize_json_field(val) -> list:
     if not val:
         return []
@@ -35,6 +31,7 @@ def _paper_list_item(row) -> dict:
         "n_labelled_variables": row["n_labelled"],
         "has_ground_truth": bool(row["has_ground_truth"]),
         "conversion_date": row["conversion_date"],
+        "max_participant_n": row.get("max_participant_n"),
     }
 
 
@@ -44,13 +41,14 @@ def _get_papers(
 ) -> dict:
     conn = get_connection()
     try:
+        cur = conn.cursor()
         where_clauses = []
-        params = []
+        params: list = []
 
         if q:
             like = f"%{q}%"
             where_clauses.append(
-                "(p.title LIKE ? OR p.description LIKE ? OR p.keywords LIKE ? OR p.authors LIKE ?)"
+                "(p.title ILIKE %s OR p.description ILIKE %s OR p.keywords ILIKE %s OR p.authors ILIKE %s)"
             )
             params.extend([like, like, like, like])
 
@@ -66,21 +64,26 @@ def _get_papers(
 
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
-        count_sql = f"SELECT COUNT(*) FROM papers p {where_sql}"
-        total = conn.execute(count_sql, params).fetchone()[0]
+        cur.execute(f"SELECT COUNT(*) FROM papers p {where_sql}", params)
+        total = cur.fetchone()["count"]
 
-        data_sql = f"""
+        cur.execute(
+            f"""
             SELECT p.*,
                 (SELECT COUNT(*) FROM variables v
                  WHERE v.paper_id = p.paper_id AND v.description IS NOT NULL) AS n_labelled,
                 (SELECT COUNT(*) FROM variables v2
-                 WHERE v2.paper_id = p.paper_id) AS n_variables
+                 WHERE v2.paper_id = p.paper_id) AS n_variables,
+                (SELECT MAX(v3.stat_n) FROM variables v3
+                 WHERE v3.paper_id = p.paper_id) AS max_participant_n
             FROM papers p
             {where_sql}
             ORDER BY p.title
-            LIMIT ? OFFSET ?
-        """
-        rows = conn.execute(data_sql, params + [limit, offset]).fetchall()
+            LIMIT %s OFFSET %s
+            """,
+            params + [limit, offset],
+        )
+        rows = cur.fetchall()
 
         return {
             "total": total,
@@ -93,32 +96,42 @@ def _get_papers(
 def _get_paper_detail(paper_id: str) -> dict | None:
     conn = get_connection()
     try:
-        paper = conn.execute(
-            "SELECT * FROM papers WHERE paper_id = ?", (paper_id,)
-        ).fetchone()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM papers WHERE paper_id = %s", (paper_id,))
+        paper = cur.fetchone()
         if not paper:
             return None
 
-        study_groups_rows = conn.execute(
+        cur.execute(
             """
-            SELECT * FROM study_groups WHERE paper_id = ?
+            SELECT * FROM study_groups WHERE paper_id = %s
             ORDER BY
                 CASE WHEN study_group = 'shared' THEN 1 ELSE 0 END,
                 study_group
             """,
             (paper_id,),
-        ).fetchall()
+        )
+        study_groups_rows = cur.fetchall()
+
+        cur.execute(
+            "SELECT MAX(stat_n) as max_participant_n FROM variables WHERE paper_id = %s",
+            (paper_id,),
+        )
+        max_n_row = cur.fetchone()
+        max_participant_n = max_n_row["max_participant_n"] if max_n_row else None
 
         study_groups = []
         for sg in study_groups_rows:
-            n_labelled = conn.execute(
-                "SELECT COUNT(*) FROM variables WHERE study_group_id=? AND description IS NOT NULL",
+            cur.execute(
+                "SELECT COUNT(*) FROM variables WHERE study_group_id=%s AND description IS NOT NULL",
                 (sg["id"],),
-            ).fetchone()[0]
+            )
+            n_labelled = cur.fetchone()["count"]
             study_groups.append({
                 "study_group": sg["study_group"],
                 "study_dir": sg["study_dir"],
                 "title": sg["title"],
+                "description": sg["description"],
                 "pipeline_status": {
                     "index_success": bool(sg["index_success"]),
                     "codebook_success": bool(sg["codebook_success"]),
@@ -142,6 +155,7 @@ def _get_paper_detail(paper_id: str) -> dict | None:
             "keywords": _deserialize_json_field(paper["keywords"]),
             "pipeline_version": paper["pipeline_version"],
             "conversion_date": paper["conversion_date"],
+            "max_participant_n": max_participant_n,
             "study_groups": study_groups,
         }
     finally:
@@ -151,28 +165,31 @@ def _get_paper_detail(paper_id: str) -> dict | None:
 def _get_study_group_detail(paper_id: str, study_group: str) -> dict | None:
     conn = get_connection()
     try:
-        sg = conn.execute(
-            "SELECT * FROM study_groups WHERE paper_id=? AND study_group=?",
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM study_groups WHERE paper_id=%s AND study_group=%s",
             (paper_id, study_group),
-        ).fetchone()
+        )
+        sg = cur.fetchone()
         if not sg:
             return None
 
-        paper = conn.execute(
-            "SELECT * FROM papers WHERE paper_id=?", (paper_id,)
-        ).fetchone()
+        cur.execute("SELECT * FROM papers WHERE paper_id=%s", (paper_id,))
+        paper = cur.fetchone()
         if not paper:
             return None
 
-        variables = conn.execute(
-            "SELECT * FROM variables WHERE study_group_id=? ORDER BY name",
+        cur.execute(
+            "SELECT * FROM variables WHERE study_group_id=%s ORDER BY name",
             (sg["id"],),
-        ).fetchall()
+        )
+        variables = cur.fetchall()
 
-        provenance_rows = conn.execute(
-            "SELECT * FROM provenance WHERE study_group_id=? ORDER BY psychds_path",
+        cur.execute(
+            "SELECT * FROM provenance WHERE study_group_id=%s ORDER BY psychds_path",
             (sg["id"],),
-        ).fetchall()
+        )
+        provenance_rows = cur.fetchall()
 
         def var_stats(v) -> dict | None:
             if not v["stat_mean"] and v["stat_n"] is None:
