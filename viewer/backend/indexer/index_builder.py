@@ -1,13 +1,11 @@
 """
-Build the SQLite index from the psychds/ directory tree.
+Build the PostgreSQL index from the psychds/ directory tree.
 
 Walks all discovered study directories, parses JSON files,
-inserts rows into all tables, then populates the FTS5 virtual table.
+inserts rows into all tables, then updates FTS tsvector index.
 """
 
-import json
 import logging
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,7 +17,6 @@ from indexer.parsers import parse_dataset_description, parse_provenance
 
 logger = logging.getLogger(__name__)
 
-# Shared index state
 _indexed = False
 _indexing = False
 
@@ -32,32 +29,37 @@ def is_indexing() -> bool:
     return _indexing
 
 
-def _insert_or_update_paper(conn: sqlite3.Connection, paper_meta: dict) -> None:
-    conn.execute(
+def _insert_or_update_paper(cur, paper_meta: dict) -> None:
+    cur.execute(
         """
         INSERT INTO papers (paper_id, title, description, authors, doi, keywords,
                             conversion_date, pipeline_version)
-        VALUES (:paper_id, :title, :description, :authors, :doi, :keywords,
-                :conversion_date, :pipeline_version)
+        VALUES (%(paper_id)s, %(title)s, %(description)s, %(authors)s, %(doi)s,
+                %(keywords)s, %(conversion_date)s, %(pipeline_version)s)
         ON CONFLICT(paper_id) DO UPDATE SET
-            title = excluded.title,
-            description = excluded.description,
-            authors = excluded.authors,
-            doi = excluded.doi,
-            keywords = excluded.keywords,
-            conversion_date = coalesce(excluded.conversion_date, papers.conversion_date),
-            pipeline_version = coalesce(excluded.pipeline_version, papers.pipeline_version)
+            title             = EXCLUDED.title,
+            description       = EXCLUDED.description,
+            authors           = COALESCE(EXCLUDED.authors, papers.authors),
+            doi               = COALESCE(EXCLUDED.doi, papers.doi),
+            keywords          = COALESCE(EXCLUDED.keywords, papers.keywords),
+            conversion_date   = COALESCE(EXCLUDED.conversion_date, papers.conversion_date),
+            pipeline_version  = COALESCE(EXCLUDED.pipeline_version, papers.pipeline_version)
         """,
         paper_meta,
     )
 
 
 def _insert_study_group(
-    conn: sqlite3.Connection, paper_id: str, study_group: str,
-    study_dir_name: str, study_meta: dict, has_gt: int,
-    n_variables: int, n_labelled_csv: int,
+    cur,
+    paper_id: str,
+    study_group: str,
+    study_dir_name: str,
+    study_meta: dict,
+    has_gt: int,
+    n_variables: int,
+    n_labelled_csv: int,
 ) -> int:
-    cur = conn.execute(
+    cur.execute(
         """
         INSERT INTO study_groups (
             paper_id, study_group, study_dir, title, description,
@@ -65,25 +67,26 @@ def _insert_study_group(
             n_columns, n_labelled_columns, label_status,
             has_ground_truth, n_variables, n_labelled_csv
         ) VALUES (
-            :paper_id, :study_group, :study_dir, :title, :description,
-            :index_success, :codebook_success, :n_files_total, :n_data_files,
-            :n_columns, :n_labelled_columns, :label_status,
-            :has_ground_truth, :n_variables, :n_labelled_csv
+            %(paper_id)s, %(study_group)s, %(study_dir)s, %(title)s, %(description)s,
+            %(index_success)s, %(codebook_success)s, %(n_files_total)s, %(n_data_files)s,
+            %(n_columns)s, %(n_labelled_columns)s, %(label_status)s,
+            %(has_ground_truth)s, %(n_variables)s, %(n_labelled_csv)s
         )
         ON CONFLICT(paper_id, study_group) DO UPDATE SET
-            study_dir = excluded.study_dir,
-            title = excluded.title,
-            description = excluded.description,
-            index_success = excluded.index_success,
-            codebook_success = excluded.codebook_success,
-            n_files_total = excluded.n_files_total,
-            n_data_files = excluded.n_data_files,
-            n_columns = excluded.n_columns,
-            n_labelled_columns = excluded.n_labelled_columns,
-            label_status = excluded.label_status,
-            has_ground_truth = excluded.has_ground_truth,
-            n_variables = excluded.n_variables,
-            n_labelled_csv = excluded.n_labelled_csv
+            study_dir          = EXCLUDED.study_dir,
+            title              = EXCLUDED.title,
+            description        = EXCLUDED.description,
+            index_success      = EXCLUDED.index_success,
+            codebook_success   = EXCLUDED.codebook_success,
+            n_files_total      = EXCLUDED.n_files_total,
+            n_data_files       = EXCLUDED.n_data_files,
+            n_columns          = EXCLUDED.n_columns,
+            n_labelled_columns = EXCLUDED.n_labelled_columns,
+            label_status       = EXCLUDED.label_status,
+            has_ground_truth   = EXCLUDED.has_ground_truth,
+            n_variables        = EXCLUDED.n_variables,
+            n_labelled_csv     = EXCLUDED.n_labelled_csv
+        RETURNING id
         """,
         {
             "paper_id": paper_id,
@@ -103,18 +106,20 @@ def _insert_study_group(
             "n_labelled_csv": n_labelled_csv,
         },
     )
-    # Fetch the actual row id (INSERT OR UPDATE doesn't return lastrowid on conflict)
-    row = conn.execute(
-        "SELECT id FROM study_groups WHERE paper_id=? AND study_group=?",
+    row = cur.fetchone()
+    if row:
+        return row["id"]
+    # ON CONFLICT path may not return — fetch explicitly
+    cur.execute(
+        "SELECT id FROM study_groups WHERE paper_id=%s AND study_group=%s",
         (paper_id, study_group),
-    ).fetchone()
-    return row["id"]
+    )
+    return cur.fetchone()["id"]
 
 
 def _process_study_dir(
     paper_id: str, study_group: str, study_path: Path
 ) -> dict | None:
-    """Parse one study directory. Returns parsed data or None on failure."""
     desc_file = study_path / "dataset_description.json"
     if not desc_file.exists():
         return None
@@ -141,10 +146,6 @@ def _process_study_dir(
 
 
 def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
-    """
-    Full index rebuild. Blocks until complete.
-    Updates _indexed/_indexing global state.
-    """
     global _indexed, _indexing
 
     _indexing = True
@@ -153,25 +154,19 @@ def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
     try:
         logger.info("Starting index build from %s", psychds_dir)
         conn = init_db()
+        cur = conn.cursor()
 
         # Clear existing data
-        # FTS5 content tables require the special delete-all command
-        try:
-            conn.execute("INSERT INTO variables_fts(variables_fts) VALUES('delete-all')")
-        except Exception:
-            # Table may not exist yet on first run — safe to ignore
-            pass
-        conn.execute("DELETE FROM provenance")
-        conn.execute("DELETE FROM variables")
-        conn.execute("DELETE FROM study_groups")
-        conn.execute("DELETE FROM papers")
-        conn.execute("DELETE FROM _meta")
+        cur.execute("DELETE FROM provenance")
+        cur.execute("DELETE FROM variables")
+        cur.execute("DELETE FROM study_groups")
+        cur.execute("DELETE FROM papers")
+        cur.execute("DELETE FROM _meta")
         conn.commit()
 
         study_dirs = discover_study_dirs(psychds_dir)
         logger.info("Processing %d study directories", len(study_dirs))
 
-        # Parse files in parallel (I/O bound)
         parsed_results = []
         with ThreadPoolExecutor(max_workers=INDEX_MAX_WORKERS) as executor:
             futures = {
@@ -187,24 +182,19 @@ def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
                 except Exception as e:
                     logger.error("Error processing %s/%s: %s", pid, sg, e)
 
-        # Single-threaded SQLite writes
         pipeline_version = None
         for result in parsed_results:
-            paper_id = result["paper_id"]
+            paper_id = str(result["paper_id"])
             study_group = result["study_group"]
             paper_meta = result["paper_meta"]
+            paper_meta["paper_id"] = paper_id
 
-            # paper_id must stay as string
-            paper_meta["paper_id"] = str(paper_meta["paper_id"])
-
-            _insert_or_update_paper(conn, paper_meta)
+            _insert_or_update_paper(cur, paper_meta)
 
             n_vars = len(result["variables"])
-            n_labelled = sum(
-                1 for v in result["variables"] if v.get("description")
-            )
+            n_labelled = sum(1 for v in result["variables"] if v.get("description"))
             sg_id = _insert_study_group(
-                conn,
+                cur,
                 paper_id=paper_id,
                 study_group=study_group,
                 study_dir_name=result["study_dir_name"],
@@ -214,11 +204,10 @@ def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
                 n_labelled_csv=n_labelled,
             )
 
-            # Insert variables (skip entries with null/empty name)
             for var in result["variables"]:
                 if not var.get("name"):
                     continue
-                conn.execute(
+                cur.execute(
                     """
                     INSERT INTO variables (
                         paper_id, study_group_id, name, description, col_type,
@@ -228,20 +217,19 @@ def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
                         stat_median, stat_p25, stat_p75, stat_iqr,
                         stat_skewness, stat_kurtosis
                     ) VALUES (
-                        :paper_id, :study_group_id, :name, :description, :col_type,
-                        :source_file, :sample_values, :value_pattern,
-                        :min_value, :max_value,
-                        :stat_n, :stat_n_missing, :stat_mean, :stat_sd, :stat_se,
-                        :stat_median, :stat_p25, :stat_p75, :stat_iqr,
-                        :stat_skewness, :stat_kurtosis
+                        %(paper_id)s, %(study_group_id)s, %(name)s, %(description)s,
+                        %(col_type)s, %(source_file)s, %(sample_values)s, %(value_pattern)s,
+                        %(min_value)s, %(max_value)s,
+                        %(stat_n)s, %(stat_n_missing)s, %(stat_mean)s, %(stat_sd)s,
+                        %(stat_se)s, %(stat_median)s, %(stat_p25)s, %(stat_p75)s,
+                        %(stat_iqr)s, %(stat_skewness)s, %(stat_kurtosis)s
                     )
                     """,
                     {**var, "paper_id": paper_id, "study_group_id": sg_id},
                 )
 
-            # Insert provenance
             for prov in result["provenance"]:
-                conn.execute(
+                cur.execute(
                     """
                     INSERT INTO provenance (
                         study_group_id, psychds_path, original_rel_path,
@@ -250,11 +238,11 @@ def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
                         txt_extraction_attempted, txt_extraction_skipped,
                         txt_skip_reason, txt_psychds_path
                     ) VALUES (
-                        :study_group_id, :psychds_path, :original_rel_path,
-                        :original_format, :pipeline_type, :pipeline_group,
-                        :pipeline_data_granularity, :ground_truth_validated,
-                        :txt_extraction_attempted, :txt_extraction_skipped,
-                        :txt_skip_reason, :txt_psychds_path
+                        %(study_group_id)s, %(psychds_path)s, %(original_rel_path)s,
+                        %(original_format)s, %(pipeline_type)s, %(pipeline_group)s,
+                        %(pipeline_data_granularity)s, %(ground_truth_validated)s,
+                        %(txt_extraction_attempted)s, %(txt_extraction_skipped)s,
+                        %(txt_skip_reason)s, %(txt_psychds_path)s
                     )
                     """,
                     {**prov, "study_group_id": sg_id},
@@ -265,45 +253,37 @@ def build_index(psychds_dir: str = PSYCHDS_DIR) -> None:
 
         conn.commit()
 
-        # Update paper n_study_groups
-        conn.execute(
+        cur.execute(
             """
             UPDATE papers SET n_study_groups = (
                 SELECT COUNT(*) FROM study_groups WHERE study_groups.paper_id = papers.paper_id
             )
             """
         )
-
-        # Update paper has_ground_truth
-        conn.execute(
+        cur.execute(
             """
             UPDATE papers SET has_ground_truth = (
-                SELECT MAX(has_ground_truth) FROM study_groups
+                SELECT COALESCE(MAX(has_ground_truth), 0) FROM study_groups
                 WHERE study_groups.paper_id = papers.paper_id
             )
             """
         )
 
-        # Populate FTS5
-        conn.execute(
-            """
-            INSERT INTO variables_fts (variable_id, name, description, sample_values)
-            SELECT id, name, description, sample_values FROM variables
-            """
-        )
-
-        # Update _meta
         now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "INSERT OR REPLACE INTO _meta (key, value) VALUES ('last_indexed', ?)", (now,)
+        cur.execute(
+            "INSERT INTO _meta (key, value) VALUES ('last_indexed', %s) "
+            "ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value",
+            (now,),
         )
         if pipeline_version:
-            conn.execute(
-                "INSERT OR REPLACE INTO _meta (key, value) VALUES ('pipeline_version', ?)",
+            cur.execute(
+                "INSERT INTO _meta (key, value) VALUES ('pipeline_version', %s) "
+                "ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value",
                 (pipeline_version,),
             )
 
         conn.commit()
+        cur.close()
         conn.close()
 
         n_papers = len({r["paper_id"] for r in parsed_results})

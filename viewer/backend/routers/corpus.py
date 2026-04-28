@@ -9,19 +9,19 @@ router = APIRouter()
 def _get_stats():
     conn = get_connection()
     try:
-        n_papers = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-        n_study_groups = conn.execute("SELECT COUNT(*) FROM study_groups").fetchone()[0]
-        n_variables = conn.execute("SELECT COUNT(*) FROM variables").fetchone()[0]
-        n_labelled = conn.execute(
-            "SELECT COUNT(*) FROM variables WHERE description IS NOT NULL"
-        ).fetchone()[0]
-        n_gt = conn.execute(
-            "SELECT COUNT(*) FROM provenance WHERE ground_truth_validated=1"
-        ).fetchone()[0]
-        meta = {
-            row["key"]: row["value"]
-            for row in conn.execute("SELECT key, value FROM _meta").fetchall()
-        }
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM papers")
+        n_papers = cur.fetchone()["count"]
+        cur.execute("SELECT COUNT(*) FROM study_groups")
+        n_study_groups = cur.fetchone()["count"]
+        cur.execute("SELECT COUNT(*) FROM variables")
+        n_variables = cur.fetchone()["count"]
+        cur.execute("SELECT COUNT(*) FROM variables WHERE description IS NOT NULL")
+        n_labelled = cur.fetchone()["count"]
+        cur.execute("SELECT COUNT(*) FROM provenance WHERE ground_truth_validated=1")
+        n_gt = cur.fetchone()["count"]
+        cur.execute("SELECT key, value FROM _meta")
+        meta = {row["key"]: row["value"] for row in cur.fetchall()}
         return {
             "n_papers": n_papers,
             "n_study_groups": n_study_groups,

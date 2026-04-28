@@ -10,7 +10,6 @@ import csv
 import io
 import os
 import re
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -60,10 +59,12 @@ def _sum_dir_sizes(path: Path) -> tuple[int, int]:
 def _get_study_dir(paper_id: str, study_group: str) -> str | None:
     conn = get_connection()
     try:
-        row = conn.execute(
-            "SELECT study_dir FROM study_groups WHERE paper_id=? AND study_group=?",
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT study_dir FROM study_groups WHERE paper_id=%s AND study_group=%s",
             (paper_id, study_group),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         return row["study_dir"] if row else None
     finally:
         conn.close()
@@ -81,10 +82,12 @@ def _paper_download_size(paper_id: str) -> dict | None:
 
     conn = get_connection()
     try:
-        sgs = conn.execute(
-            "SELECT study_group, study_dir FROM study_groups WHERE paper_id=?",
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT study_group, study_dir FROM study_groups WHERE paper_id=%s",
             (paper_id,),
-        ).fetchall()
+        )
+        sgs = cur.fetchall()
     finally:
         conn.close()
 
@@ -128,26 +131,28 @@ async def paper_download_size(paper_id: str):
 def _build_paper_manifest(paper_id: str, study_group: str | None) -> bytes:
     conn = get_connection()
     try:
+        cur = conn.cursor()
         if study_group:
-            prov_rows = conn.execute(
+            cur.execute(
                 """
                 SELECT prov.*, sg.study_group FROM provenance prov
                 JOIN study_groups sg ON prov.study_group_id = sg.id
-                WHERE sg.paper_id=? AND sg.study_group=?
+                WHERE sg.paper_id=%s AND sg.study_group=%s
                 ORDER BY prov.psychds_path
                 """,
                 (paper_id, study_group),
-            ).fetchall()
+            )
         else:
-            prov_rows = conn.execute(
+            cur.execute(
                 """
                 SELECT prov.*, sg.study_group FROM provenance prov
                 JOIN study_groups sg ON prov.study_group_id = sg.id
-                WHERE sg.paper_id=?
+                WHERE sg.paper_id=%s
                 ORDER BY sg.study_group, prov.psychds_path
                 """,
                 (paper_id,),
-            ).fetchall()
+            )
+        prov_rows = cur.fetchall()
     finally:
         conn.close()
 
@@ -256,10 +261,11 @@ def _resolve_variable_csv_files(
     """
     conn = get_connection()
     try:
+        cur = conn.cursor()
         extra_where = []
-        extra_params = []
+        extra_params: list = []
         if col_types:
-            placeholders = ",".join("?" * len(col_types))
+            placeholders = ",".join(["%s"] * len(col_types))
             extra_where.append(f"v.col_type IN ({placeholders})")
             extra_params.extend(col_types)
         if has_description is True:
@@ -268,31 +274,17 @@ def _resolve_variable_csv_files(
             extra_where.append("v.description IS NULL")
         extra_sql = (" AND " + " AND ".join(extra_where)) if extra_where else ""
 
-        try:
-            fts_query = f'name:"{q}"* OR description:"{q}"*'
-            sql = f"""
-                SELECT v.name, v.description, v.source_file,
-                       v.paper_id, sg.study_group, sg.study_dir,
-                       p.title as paper_title, p.doi
-                FROM variables_fts fts
-                JOIN variables v ON fts.variable_id = v.id
-                JOIN study_groups sg ON v.study_group_id = sg.id
-                JOIN papers p ON v.paper_id = p.paper_id
-                WHERE variables_fts MATCH ?{extra_sql}
-            """
-            rows = conn.execute(sql, [fts_query] + extra_params).fetchall()
-        except sqlite3.OperationalError:
-            like = f"%{q}%"
-            sql = f"""
-                SELECT v.name, v.description, v.source_file,
-                       v.paper_id, sg.study_group, sg.study_dir,
-                       p.title as paper_title, p.doi
-                FROM variables v
-                JOIN study_groups sg ON v.study_group_id = sg.id
-                JOIN papers p ON v.paper_id = p.paper_id
-                WHERE (v.name LIKE ? OR v.description LIKE ?){extra_sql}
-            """
-            rows = conn.execute(sql, [like, like] + extra_params).fetchall()
+        sql = f"""
+            SELECT v.name, v.description, v.source_file,
+                   v.paper_id, sg.study_group, sg.study_dir,
+                   p.title as paper_title, p.doi
+            FROM variables v
+            JOIN study_groups sg ON v.study_group_id = sg.id
+            JOIN papers p ON v.paper_id = p.paper_id
+            WHERE v.search_vector @@ websearch_to_tsquery('english', %s){extra_sql}
+        """
+        cur.execute(sql, [q] + extra_params)
+        rows = cur.fetchall()
     finally:
         conn.close()
 
@@ -481,16 +473,18 @@ async def variable_search_download(
 async def variable_download(variable_id: int):
     conn = get_connection()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT v.name, v.source_file, v.paper_id,
                    sg.study_dir, sg.study_group
             FROM variables v
             JOIN study_groups sg ON v.study_group_id = sg.id
-            WHERE v.id = ?
+            WHERE v.id = %s
             """,
             (variable_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
     finally:
         conn.close()
 

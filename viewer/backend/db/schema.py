@@ -1,11 +1,9 @@
-import sqlite3
-from config import DB_PATH
+import psycopg2
+import psycopg2.extras
+from config import DATABASE_URL
 
 
 CREATE_TABLES = """
-PRAGMA journal_mode=WAL;
-PRAGMA foreign_keys=ON;
-
 CREATE TABLE IF NOT EXISTS papers (
     paper_id          TEXT PRIMARY KEY,
     title             TEXT NOT NULL,
@@ -20,7 +18,7 @@ CREATE TABLE IF NOT EXISTS papers (
 );
 
 CREATE TABLE IF NOT EXISTS study_groups (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                 SERIAL PRIMARY KEY,
     paper_id           TEXT NOT NULL REFERENCES papers(paper_id),
     study_group        TEXT NOT NULL,
     study_dir          TEXT NOT NULL,
@@ -40,7 +38,7 @@ CREATE TABLE IF NOT EXISTS study_groups (
 );
 
 CREATE TABLE IF NOT EXISTS variables (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    id               SERIAL PRIMARY KEY,
     paper_id         TEXT NOT NULL REFERENCES papers(paper_id),
     study_group_id   INTEGER NOT NULL REFERENCES study_groups(id),
     name             TEXT NOT NULL,
@@ -49,23 +47,28 @@ CREATE TABLE IF NOT EXISTS variables (
     source_file      TEXT NOT NULL,
     sample_values    TEXT,
     value_pattern    TEXT,
-    min_value        REAL,
-    max_value        REAL,
+    min_value        DOUBLE PRECISION,
+    max_value        DOUBLE PRECISION,
     stat_n           INTEGER,
     stat_n_missing   INTEGER,
-    stat_mean        REAL,
-    stat_sd          REAL,
-    stat_se          REAL,
-    stat_median      REAL,
-    stat_p25         REAL,
-    stat_p75         REAL,
-    stat_iqr         REAL,
-    stat_skewness    REAL,
-    stat_kurtosis    REAL
+    stat_mean        DOUBLE PRECISION,
+    stat_sd          DOUBLE PRECISION,
+    stat_se          DOUBLE PRECISION,
+    stat_median      DOUBLE PRECISION,
+    stat_p25         DOUBLE PRECISION,
+    stat_p75         DOUBLE PRECISION,
+    stat_iqr         DOUBLE PRECISION,
+    stat_skewness    DOUBLE PRECISION,
+    stat_kurtosis    DOUBLE PRECISION,
+    search_vector    tsvector GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(name, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(description, '')), 'B') ||
+        setweight(to_tsvector('english', coalesce(sample_values, '')), 'C')
+    ) STORED
 );
 
 CREATE TABLE IF NOT EXISTS provenance (
-    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                         SERIAL PRIMARY KEY,
     study_group_id             INTEGER NOT NULL REFERENCES study_groups(id),
     psychds_path               TEXT NOT NULL,
     original_rel_path          TEXT,
@@ -85,40 +88,31 @@ CREATE TABLE IF NOT EXISTS _meta (
     value TEXT NOT NULL
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS variables_fts USING fts5(
-    variable_id UNINDEXED,
-    name,
-    description,
-    sample_values,
-    content='variables',
-    content_rowid='id'
-);
-
 CREATE INDEX IF NOT EXISTS idx_papers_has_ground_truth ON papers(has_ground_truth);
 CREATE INDEX IF NOT EXISTS idx_study_groups_paper_id ON study_groups(paper_id);
 CREATE INDEX IF NOT EXISTS idx_variables_paper_id ON variables(paper_id);
 CREATE INDEX IF NOT EXISTS idx_variables_study_group_id ON variables(study_group_id);
 CREATE INDEX IF NOT EXISTS idx_variables_col_type ON variables(col_type);
-CREATE INDEX IF NOT EXISTS idx_variables_name ON variables(name);
+CREATE INDEX IF NOT EXISTS idx_variables_name ON variables(md5(name));
+CREATE INDEX IF NOT EXISTS idx_variables_search_vector ON variables USING GIN(search_vector);
 CREATE INDEX IF NOT EXISTS idx_provenance_study_group_id ON provenance(study_group_id);
 CREATE INDEX IF NOT EXISTS idx_provenance_pipeline_type ON provenance(pipeline_type);
 """
 
 
-def init_db(db_path: str = DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    for statement in CREATE_TABLES.split(";"):
-        stmt = statement.strip()
-        if stmt:
-            conn.execute(stmt)
+def init_db(database_url: str = DATABASE_URL) -> psycopg2.extensions.connection:
+    conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+    conn.autocommit = False
+    with conn.cursor() as cur:
+        for statement in CREATE_TABLES.split(";"):
+            stmt = statement.strip()
+            if stmt:
+                cur.execute(stmt)
     conn.commit()
     return conn
 
 
-def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+def get_connection(database_url: str = DATABASE_URL) -> psycopg2.extensions.connection:
+    conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+    conn.autocommit = False
     return conn

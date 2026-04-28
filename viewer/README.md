@@ -7,6 +7,7 @@ A self-contained, Dockerized web application for browsing PsychDS dataset output
 ```bash
 cd viewer/
 PSYCHDS_DIR=/path/to/your/psychds docker-compose up --build
+PSYCHDS_DIR=/Volumes/NINJAV/DataCheckOut/psychds docker-compose up --build
 ```
 
 Then open **http://localhost:3000** in your browser.
