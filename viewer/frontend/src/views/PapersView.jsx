@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { api } from '../api/client'
 import TypeBadge from '../components/TypeBadge'
 import VariableTable from '../components/VariableTable'
+import VariableFilter from '../components/VariableFilter'
 import ProvenanceTable from '../components/ProvenanceTable'
 import VariableDetailModal from '../components/VariableDetailModal'
 import DownloadConfirmationPopover from '../components/DownloadConfirmationPopover'
 import { LoadingSpinner, NoPaperSelected, ErrorBanner } from '../components/StateViews'
 import { useDownload } from '../hooks/useDownload'
+import { filterVariables } from '../utils/filter'
 import Toast from '../components/Toast'
 import '../styles/responsive.css'
 
@@ -24,6 +26,10 @@ function PaperCard({ paper, selected, onSelect, onDownload }) {
   const authorText = paper.authors?.length > 0
     ? paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ` + ${paper.authors.length - 3} more` : '')
     : null
+
+  const participantCountText = paper.max_participant_n
+    ? `up to ${paper.max_participant_n.toLocaleString()} participants`
+    : 'N unknown'
 
   return (
     <div
@@ -49,6 +55,9 @@ function PaperCard({ paper, selected, onSelect, onDownload }) {
           {authorText}
         </div>
       )}
+      <div style={{ fontSize: '12px', color: 'var(--color-accent)', fontWeight: 500, marginBottom: '6px' }} title="Maximum observed sample size across variables">
+        {participantCountText}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-muted)' }}>
         <span>
           {paper.n_study_groups} {paper.n_study_groups === 1 ? 'study' : 'studies'} · {paper.n_variables?.toLocaleString()} vars · {paper.n_labelled_variables?.toLocaleString()} labelled
@@ -99,6 +108,21 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
     }
   }
 
+  const renderTitle = () => {
+    return (
+      <>
+        <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: sg.description ? '4px' : 0 }}>
+          {sg.title || sg.study_group}
+        </div>
+        {sg.description && (
+          <div className="study-description" title={sg.description}>
+            {sg.description}
+          </div>
+        )}
+      </>
+    )
+  }
+
   return (
     <div style={{ border: '1px solid var(--color-border)', borderRadius: '6px', marginBottom: '8px', overflow: 'hidden' }}>
       <div
@@ -106,11 +130,12 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
         style={{
           padding: '10px 14px', cursor: 'pointer',
           background: 'var(--color-surface-2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600 }}>{sg.study_group}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+          {renderTitle()}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
           <span style={{ color: sg.pipeline_status?.index_success ? 'var(--color-success)' : 'var(--color-error)', fontSize: '12px' }}>
             Index {sg.pipeline_status?.index_success ? '✓' : '✗'}
           </span>
@@ -125,6 +150,7 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
               {labelInfo.label}
             </span>
           )}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
@@ -170,6 +196,7 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
   const [loading, setLoading] = useState(false)
   const [allVars, setAllVars] = useState(null)
   const [allVarsLoading, setAllVarsLoading] = useState(false)
+  const [filterText, setFilterText] = useState('')
   const downloadRef = useRef(null)
 
   useEffect(() => {
@@ -292,16 +319,27 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
         )}
         {tab === 'allvars' && (
           <div>
+            {allVars && <VariableFilter value={filterText} onChange={setFilterText} />}
             {allVarsLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}><LoadingSpinner /></div>
             ) : allVars ? (
-              <VariableTable variables={allVars} onRowClick={onVarClick} />
+              <FilteredVariables variables={allVars} filterText={filterText} onRowClick={onVarClick} />
             ) : null}
           </div>
         )}
       </div>
     </div>
   )
+}
+
+function FilteredVariables({ variables, filterText, onRowClick }) {
+  const filtered = useMemo(() => filterVariables(variables, filterText), [variables, filterText])
+
+  if (filtered.length === 0 && filterText) {
+    return <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', padding: '16px 0' }}>No variables match your filter.</p>
+  }
+
+  return <VariableTable variables={filtered} onRowClick={onRowClick} />
 }
 
 function ExpandableText({ text, maxLines }) {

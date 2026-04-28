@@ -6,10 +6,12 @@ A read-only web viewer for dataset outputs generated with [DataCheck](https://gi
 
 ```bash
 cd viewer
-PSYCHDS_DIR=/path/to/psychds docker-compose up --build
+PSYCHDS_DIR=/Volumes/Models/dev/metacheck-datacheck/data_check/psychds docker-compose up --build
+PSYCHDS_DIR=/Volumes/NINJAV/DataCheckOut/psychds docker-compose up --build
+
 ```
 
-Open **http://localhost:3000**.
+Open **http://localhost:3001**.
 
 ## What it does
 

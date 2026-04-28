@@ -18,6 +18,21 @@ def _safe_str(val) -> str | None:
     return str(val)
 
 
+def _clean_title(title: str) -> str:
+    """Fix known upstream pipeline title artifacts."""
+    import re
+    # Strip journal-metadata prefix: e.g. '723377P SSXXX10.1177/0956797617723377Walco, RisenActual Title'
+    title = re.sub(
+        r'^\d+\w*\s*\w*10\.\d+/\d+[A-Z][a-z]+(?:,\s*[A-Z][a-z]+)*',
+        '', title
+    ).strip()
+    # Strip leading dots
+    title = title.lstrip('.').strip()
+    # Strip ' — Study XXX' suffix
+    title = re.sub(r'\s*[—–-]+\s*Study\s+\S+\s*$', '', title, flags=re.IGNORECASE).strip()
+    return title
+
+
 def _extract_authors(author_field) -> str | None:
     """Convert schema:author array to JSON string of names."""
     if not author_field:
@@ -60,10 +75,12 @@ def parse_dataset_description(path: Path) -> dict:
         logger.error("Failed to parse %s: %s", path, e)
         return {}
 
+    raw_name = _safe_str(data.get("schema:name", "")) or ""
+
     # Paper-level metadata
     paper_meta = {
         "paper_id": str(data.get("metacheck:paper_id", path.parent.parent.name)),
-        "title": _safe_str(data.get("schema:name", "")),
+        "title": _clean_title(raw_name),
         "description": _safe_str(data.get("schema:description")),
         "authors": _extract_authors(data.get("schema:author")),
         "doi": _safe_str(data.get("schema:identifier")),
@@ -80,7 +97,7 @@ def parse_dataset_description(path: Path) -> dict:
 
     study_meta = {
         "study_group": _safe_str(data.get("metacheck:study_group", "")),
-        "title": _safe_str(data.get("schema:name", "")),
+        "title": raw_name.lstrip('.').strip(),
         "description": _safe_str(data.get("schema:description")),
         "index_success": 1 if pipeline_status.get("index_success") else 0,
         "codebook_success": 1 if pipeline_status.get("codebook_success") else 0,

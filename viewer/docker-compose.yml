@@ -1,16 +1,37 @@
 version: "3.9"
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-psychtrove}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-psychtrove}
+      POSTGRES_DB: ${POSTGRES_DB:-psychtrove}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-psychtrove}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
+    env_file: .env
     volumes:
       - "${PSYCHDS_DIR}:/data/psychds:ro"
     environment:
       - PSYCHDS_DIR=/data/psychds
+      - DATABASE_URL=${DATABASE_URL:-postgresql://psychtrove:psychtrove@postgres:5432/psychtrove}
       - INDEX_ON_START=${INDEX_ON_START:-true}
       - INDEX_MAX_WORKERS=${INDEX_MAX_WORKERS:-4}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -26,3 +47,6 @@ services:
         condition: service_healthy
     environment:
       - VITE_API_BASE=http://localhost:8000
+
+volumes:
+  postgres_data:

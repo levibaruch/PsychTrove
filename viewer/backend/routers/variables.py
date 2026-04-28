@@ -1,7 +1,6 @@
 import asyncio
 import json
 import re
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +11,16 @@ from config import PSYCHDS_DIR
 from db.schema import get_connection
 
 router = APIRouter()
+
+_SORT_COLS = {
+    "name":        "v.name",
+    "description": "v.description",
+    "col_type":    "v.col_type",
+    "paper_title": "p.title",
+    "stat_n":      "v.stat_n",
+    "stat_mean":   "v.stat_mean",
+    "stat_sd":     "v.stat_sd",
+}
 
 
 def _var_stats(v) -> dict | None:
@@ -32,21 +41,43 @@ def _var_stats(v) -> dict | None:
     }
 
 
+def _build_tsquery(q: str) -> str:
+    """Convert user input to a websearch_to_tsquery-compatible string."""
+    return q.strip()
+
+
+_SELECT_COLS = """v.id as variable_id, v.name, v.description, v.col_type,
+       v.source_file, v.sample_values, v.min_value, v.max_value,
+       v.stat_n, v.stat_n_missing, v.stat_mean, v.stat_sd, v.stat_se,
+       v.stat_median, v.stat_p25, v.stat_p75, v.stat_iqr,
+       v.stat_skewness, v.stat_kurtosis,
+       p.paper_id, p.title as paper_title, p.doi,
+       sg.study_group"""
+
+_JOINS = """JOIN study_groups sg ON v.study_group_id = sg.id
+        JOIN papers p ON v.paper_id = p.paper_id"""
+
+
 def _search_variables(
     q: str,
     col_types: Optional[list[str]],
     has_description: Optional[bool],
     paper_id: Optional[str],
+    paper_q: Optional[str],
+    min_n: Optional[int],
+    sort_by: Optional[str],
+    sort_dir: str,
     limit: int,
     offset: int,
 ) -> dict:
     conn = get_connection()
     try:
+        cur = conn.cursor()
         extra_where = []
-        extra_params = []
+        extra_params: list = []
 
         if col_types:
-            placeholders = ",".join("?" * len(col_types))
+            placeholders = ",".join(["%s"] * len(col_types))
             extra_where.append(f"v.col_type IN ({placeholders})")
             extra_params.extend(col_types)
 
@@ -56,70 +87,43 @@ def _search_variables(
             extra_where.append("v.description IS NULL")
 
         if paper_id:
-            extra_where.append("v.paper_id = ?")
+            extra_where.append("v.paper_id = %s")
             extra_params.append(paper_id)
 
+        if paper_q:
+            extra_where.append("p.title ILIKE %s")
+            extra_params.append(f"%{paper_q}%")
+
+        if min_n is not None and min_n > 0:
+            extra_where.append("v.stat_n IS NOT NULL AND v.stat_n >= %s")
+            extra_params.append(min_n)
+
         extra_sql = (" AND " + " AND ".join(extra_where)) if extra_where else ""
+        order_dir = "DESC" if sort_dir == "desc" else "ASC"
+        order_col = _SORT_COLS.get(sort_by, "v.name") if sort_by else "v.name"
+        order_clause = f"{order_col} {order_dir} NULLS LAST"
 
-        # Try FTS5 first
-        try:
-            fts_query = f'name:"{q}"* OR description:"{q}"*'
-            fts_sql = f"""
-                SELECT v.id as variable_id, v.name, v.description, v.col_type,
-                       v.source_file, v.sample_values, v.min_value, v.max_value,
-                       v.stat_n, v.stat_n_missing, v.stat_mean, v.stat_sd, v.stat_se,
-                       v.stat_median, v.stat_p25, v.stat_p75, v.stat_iqr,
-                       v.stat_skewness, v.stat_kurtosis,
-                       p.paper_id, p.title as paper_title, p.doi,
-                       sg.study_group
-                FROM variables_fts fts
-                JOIN variables v ON fts.variable_id = v.id
-                JOIN study_groups sg ON v.study_group_id = sg.id
-                JOIN papers p ON v.paper_id = p.paper_id
-                WHERE variables_fts MATCH ?{extra_sql}
-                ORDER BY rank
-            """
-            count_sql = f"""
-                SELECT COUNT(*) FROM variables_fts fts
-                JOIN variables v ON fts.variable_id = v.id
-                JOIN study_groups sg ON v.study_group_id = sg.id
-                JOIN papers p ON v.paper_id = p.paper_id
-                WHERE variables_fts MATCH ?{extra_sql}
-            """
-            total = conn.execute(count_sql, [fts_query] + extra_params).fetchone()[0]
-            rows = conn.execute(
-                fts_sql + f" LIMIT ? OFFSET ?",
-                [fts_query] + extra_params + [limit, offset],
-            ).fetchall()
+        fts_sql = f"""
+            SELECT {_SELECT_COLS},
+                   ts_rank(v.search_vector, websearch_to_tsquery('english', %s)) AS rank
+            FROM variables v
+            {_JOINS}
+            WHERE v.search_vector @@ websearch_to_tsquery('english', %s){extra_sql}
+            ORDER BY rank DESC, {order_clause}
+        """
+        fts_params = [q, q] + extra_params
 
-        except sqlite3.OperationalError:
-            # Fallback to LIKE
-            like = f"%{q}%"
-            like_sql = f"""
-                SELECT v.id as variable_id, v.name, v.description, v.col_type,
-                       v.source_file, v.sample_values, v.min_value, v.max_value,
-                       v.stat_n, v.stat_n_missing, v.stat_mean, v.stat_sd, v.stat_se,
-                       v.stat_median, v.stat_p25, v.stat_p75, v.stat_iqr,
-                       v.stat_skewness, v.stat_kurtosis,
-                       p.paper_id, p.title as paper_title, p.doi,
-                       sg.study_group
-                FROM variables v
-                JOIN study_groups sg ON v.study_group_id = sg.id
-                JOIN papers p ON v.paper_id = p.paper_id
-                WHERE (v.name LIKE ? OR v.description LIKE ?){extra_sql}
-                ORDER BY v.name
-            """
-            count_sql = f"""
-                SELECT COUNT(*) FROM variables v
-                JOIN study_groups sg ON v.study_group_id = sg.id
-                JOIN papers p ON v.paper_id = p.paper_id
-                WHERE (v.name LIKE ? OR v.description LIKE ?){extra_sql}
-            """
-            total = conn.execute(count_sql, [like, like] + extra_params).fetchone()[0]
-            rows = conn.execute(
-                like_sql + f" LIMIT ? OFFSET ?",
-                [like, like] + extra_params + [limit, offset],
-            ).fetchall()
+        count_sql = f"""
+            SELECT COUNT(*) FROM variables v {_JOINS}
+            WHERE v.search_vector @@ websearch_to_tsquery('english', %s){extra_sql}
+        """
+        count_params = [q] + extra_params
+
+        cur.execute(count_sql, count_params)
+        total = cur.fetchone()["count"]
+
+        cur.execute(fts_sql + " LIMIT %s OFFSET %s", fts_params + [limit, offset])
+        rows = cur.fetchall()
 
         results = []
         for r in rows:
@@ -147,22 +151,16 @@ def _search_variables(
 def _resolve_sidecar(
     paper_id: str, study_dir: str, source_file: str
 ) -> dict | None:
-    """
-    Resolve source-*_data.json sidecar for a variable.
-    spec §6.5: strip non-alphanumeric from basename, lowercase.
-    """
     root = Path(PSYCHDS_DIR)
     data_dir = root / paper_id / study_dir / "data"
     if not data_dir.exists():
         return None
 
-    # Derive slug from source_file basename
     basename = Path(source_file).stem
     slug = re.sub(r"[^a-z0-9]", "", basename.lower())
     if not slug:
         return None
 
-    # Try exact slug match first
     exact = data_dir / f"source-{slug}_data.json"
     candidates = list(data_dir.glob("source-*_data.json"))
 
@@ -171,7 +169,6 @@ def _resolve_sidecar(
     elif len(candidates) == 1:
         target = candidates[0]
     else:
-        # Match by metacheck:original_file.rel_path
         target = None
         for c in candidates:
             try:
@@ -226,16 +223,18 @@ def _resolve_sidecar(
 def _get_variable_detail(variable_id: int) -> dict | None:
     conn = get_connection()
     try:
-        row = conn.execute(
+        cur = conn.cursor()
+        cur.execute(
             """
             SELECT v.*, sg.study_group, sg.study_dir, p.paper_id as pid
             FROM variables v
             JOIN study_groups sg ON v.study_group_id = sg.id
             JOIN papers p ON v.paper_id = p.paper_id
-            WHERE v.id = ?
+            WHERE v.id = %s
             """,
             (variable_id,),
-        ).fetchone()
+        )
+        row = cur.fetchone()
         if not row:
             return None
 
@@ -243,7 +242,6 @@ def _get_variable_detail(variable_id: int) -> dict | None:
             str(row["pid"]), row["study_dir"], row["source_file"]
         )
 
-        # Remove the current variable from sibling list
         if source_file_context and source_file_context.get("sibling_variables"):
             source_file_context["sibling_variables"] = [
                 sv for sv in source_file_context["sibling_variables"]
@@ -275,13 +273,19 @@ async def search_variables(
     col_type: Optional[str] = Query(None),
     has_description: Optional[bool] = Query(None),
     paper_id: Optional[str] = Query(None),
+    paper_q: Optional[str] = Query(None),
+    min_n: Optional[int] = Query(None, ge=0),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: str = Query("asc"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     col_types = [c.strip() for c in col_type.split(",")] if col_type else None
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
-        None, _search_variables, q, col_types, has_description, paper_id, limit, offset
+        None, _search_variables,
+        q, col_types, has_description, paper_id, paper_q, min_n,
+        sort_by, sort_dir, limit, offset,
     )
     return result
 
