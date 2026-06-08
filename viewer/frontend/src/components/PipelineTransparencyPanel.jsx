@@ -77,7 +77,7 @@ export default function PipelineTransparencyPanel({ onClose }) {
             <Section title="Data Flow">
               <pre style={{
                 fontFamily: 'var(--font-mono)', fontSize: '12px',
-                background: 'var(--color-surface-2)', borderRadius: '6px',
+                background: 'var(--color-surface-2)', borderRadius: 'var(--radius)',
                 padding: '14px 16px', whiteSpace: 'pre', overflow: 'auto',
                 color: 'var(--color-text-secondary)',
               }}>
@@ -87,7 +87,7 @@ export default function PipelineTransparencyPanel({ onClose }) {
 
             <Section title="Pipeline Stages">
               {stages.map(stage => (
-                <div key={stage.id} style={{ border: '1px solid var(--color-border)', borderRadius: '6px', marginBottom: '8px', overflow: 'hidden' }}>
+                <div key={stage.id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', marginBottom: '8px', overflow: 'hidden' }}>
                   <button
                     onClick={() => toggle(stage.id)}
                     style={{

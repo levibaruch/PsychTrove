@@ -7,7 +7,7 @@ export default function BatchDownloadButton({ selectedCount, onDownload, disable
       onClick={onDownload}
       style={{
         padding: '6px 12px',
-        borderRadius: '6px',
+        borderRadius: 'var(--radius)',
         border: '1px solid var(--color-border)',
         background: 'var(--color-surface)',
         cursor: disabled || selectedCount === 0 ? 'not-allowed' : 'pointer',

@@ -12,7 +12,7 @@ export default function VariableFilter({ value, onChange }) {
           flex: 1,
           padding: '6px 10px',
           border: '1px solid var(--color-border)',
-          borderRadius: '6px',
+          borderRadius: 'var(--radius)',
           fontSize: '13px',
           background: 'var(--color-bg)',
           color: 'var(--color-text-primary)',

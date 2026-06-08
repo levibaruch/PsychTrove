@@ -38,10 +38,19 @@ export function IndexingScreen() {
   )
 }
 
+function EmptyMark() {
+  return (
+    <span style={{
+      display: 'inline-block', width: '30px', height: '30px',
+      border: '1.5px solid var(--color-border)', borderRadius: 'var(--radius)',
+    }} aria-hidden="true" />
+  )
+}
+
 export function EmptySearch() {
   return (
     <div style={centered}>
-      <span style={{ fontSize: '32px' }}>🔬</span>
+      <EmptyMark />
       <p>Search for a variable name or codebook description to explore the corpus.</p>
     </div>
   )
@@ -60,9 +69,11 @@ export function ErrorBanner({ message }) {
   return (
     <div style={{
       padding: '10px 14px',
-      background: '#fee2e2',
-      color: '#991b1b',
-      borderRadius: '6px',
+      background: 'var(--color-surface-2)',
+      color: 'var(--color-error)',
+      border: '1px solid var(--color-border)',
+      borderLeft: '3px solid var(--color-error)',
+      borderRadius: 'var(--radius)',
       fontSize: '13px',
       margin: '8px 0',
     }}>
@@ -74,7 +85,7 @@ export function ErrorBanner({ message }) {
 export function NoPaperSelected() {
   return (
     <div style={centered}>
-      <span style={{ fontSize: '32px' }}>📄</span>
+      <EmptyMark />
       <p>Select a paper to view details.</p>
     </div>
   )

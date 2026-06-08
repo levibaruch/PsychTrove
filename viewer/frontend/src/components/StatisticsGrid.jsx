@@ -6,7 +6,7 @@ const gridStyle = {
   gridTemplateColumns: '1fr 1fr',
   gap: '2px 16px',
   background: 'var(--color-surface-2)',
-  borderRadius: '6px',
+  borderRadius: 'var(--radius)',
   padding: '10px 14px',
   fontFamily: 'var(--font-mono)',
   fontSize: '12px',

@@ -12,7 +12,7 @@ const popoverStyle = {
   position: 'absolute',
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
-  borderRadius: '8px',
+  borderRadius: 'var(--radius)',
   padding: '16px',
   width: 'min(340px, 90vw)',
   boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
@@ -94,7 +94,7 @@ export default function DownloadConfirmationPopover({
                 onClick={onCancel}
                 style={{
                   padding: '6px 14px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius)',
                   border: '1px solid var(--color-border)',
                   background: 'var(--color-surface)',
                   color: 'var(--color-text-primary)',
@@ -108,7 +108,7 @@ export default function DownloadConfirmationPopover({
                 disabled={status === 'downloading'}
                 style={{
                   padding: '6px 14px',
-                  borderRadius: '6px',
+                  borderRadius: 'var(--radius)',
                   border: 'none',
                   background: 'var(--color-accent)',
                   color: '#fff',

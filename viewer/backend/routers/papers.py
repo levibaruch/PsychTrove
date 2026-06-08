@@ -30,14 +30,36 @@ def _paper_list_item(row) -> dict:
         "n_variables": row["n_variables"],
         "n_labelled_variables": row["n_labelled"],
         "has_ground_truth": bool(row["has_ground_truth"]),
+        "has_code": bool(row.get("has_code")),
         "conversion_date": row["conversion_date"],
         "max_participant_n": row.get("max_participant_n"),
     }
 
 
+# Correlated subquery expressions reused in SELECT, WHERE and ORDER BY.
+_N_VARS_SQL = "(SELECT COUNT(*) FROM variables v2 WHERE v2.paper_id = p.paper_id)"
+_N_LABELLED_SQL = "(SELECT COUNT(*) FROM variables v WHERE v.paper_id = p.paper_id AND v.description IS NOT NULL)"
+_MAX_N_SQL = "(SELECT MAX(v3.stat_n) FROM variables v3 WHERE v3.paper_id = p.paper_id)"
+_HAS_CODE_SQL = (
+    "EXISTS (SELECT 1 FROM provenance pv JOIN study_groups sg ON pv.study_group_id = sg.id "
+    "WHERE sg.paper_id = p.paper_id AND pv.pipeline_type IN ('code', 'software'))"
+)
+
+# Whitelist of sort columns -> SQL expression. Guards against injection.
+_PAPER_SORT = {
+    "title": "p.title",
+    "n_participants": _MAX_N_SQL,
+    "n_variables": _N_VARS_SQL,
+    "n_labelled": _N_LABELLED_SQL,
+}
+
+
 def _get_papers(
     q: Optional[str], has_labels: Optional[bool],
-    has_ground_truth: Optional[bool], limit: int, offset: int
+    has_ground_truth: Optional[bool], has_code: Optional[bool],
+    min_n: Optional[int], min_vars: Optional[int],
+    sort_by: Optional[str], sort_dir: str,
+    limit: int, offset: int,
 ) -> dict:
     conn = get_connection()
     try:
@@ -62,7 +84,27 @@ def _get_papers(
         elif has_ground_truth is False:
             where_clauses.append("p.has_ground_truth = 0")
 
+        if has_code is True:
+            where_clauses.append(_HAS_CODE_SQL)
+
+        if min_n is not None:
+            where_clauses.append(f"COALESCE({_MAX_N_SQL}, 0) >= %s")
+            params.append(min_n)
+
+        if min_vars is not None:
+            where_clauses.append(f"{_N_VARS_SQL} >= %s")
+            params.append(min_vars)
+
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        # Resolve sort safely from the whitelist; default to title.
+        sort_expr = _PAPER_SORT.get(sort_by or "title", "p.title")
+        direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+        if sort_expr == "p.title":
+            order_sql = f"ORDER BY p.title {direction}"
+        else:
+            # Numeric sorts: push NULLs to the end, tie-break on title.
+            order_sql = f"ORDER BY {sort_expr} {direction} NULLS LAST, p.title ASC"
 
         cur.execute(f"SELECT COUNT(*) FROM papers p {where_sql}", params)
         total = cur.fetchone()["count"]
@@ -70,15 +112,13 @@ def _get_papers(
         cur.execute(
             f"""
             SELECT p.*,
-                (SELECT COUNT(*) FROM variables v
-                 WHERE v.paper_id = p.paper_id AND v.description IS NOT NULL) AS n_labelled,
-                (SELECT COUNT(*) FROM variables v2
-                 WHERE v2.paper_id = p.paper_id) AS n_variables,
-                (SELECT MAX(v3.stat_n) FROM variables v3
-                 WHERE v3.paper_id = p.paper_id) AS max_participant_n
+                {_N_LABELLED_SQL} AS n_labelled,
+                {_N_VARS_SQL} AS n_variables,
+                {_MAX_N_SQL} AS max_participant_n,
+                {_HAS_CODE_SQL} AS has_code
             FROM papers p
             {where_sql}
-            ORDER BY p.title
+            {order_sql}
             LIMIT %s OFFSET %s
             """,
             params + [limit, offset],
@@ -155,6 +195,7 @@ def _get_paper_detail(paper_id: str) -> dict | None:
             "keywords": _deserialize_json_field(paper["keywords"]),
             "pipeline_version": paper["pipeline_version"],
             "conversion_date": paper["conversion_date"],
+            "has_ground_truth": bool(paper["has_ground_truth"]),
             "max_participant_n": max_participant_n,
             "study_groups": study_groups,
         }
@@ -270,12 +311,18 @@ async def list_papers(
     q: Optional[str] = Query(None),
     has_labels: Optional[bool] = Query(None),
     has_ground_truth: Optional[bool] = Query(None),
+    has_code: Optional[bool] = Query(None),
+    min_n: Optional[int] = Query(None, ge=0),
+    min_vars: Optional[int] = Query(None, ge=0),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: str = Query("asc"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
-        None, _get_papers, q, has_labels, has_ground_truth, limit, offset
+        None, _get_papers, q, has_labels, has_ground_truth, has_code,
+        min_n, min_vars, sort_by, sort_dir, limit, offset,
     )
     return result
 

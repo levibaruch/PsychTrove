@@ -31,7 +31,7 @@ const tdStyle = {
   verticalAlign: 'top',
 }
 
-export default function VariableTable({ variables, onRowClick, highlightTerm, sortCol, sortDir, onSort }) {
+export default function VariableTable({ variables, onRowClick, highlightTerm, sortCol, sortDir, onSort, stickyHeader = false, hideSourceFile = false }) {
   const tbodyRef = useRef(null)
 
   const handleKeyDown = useCallback((e, idx) => {
@@ -64,7 +64,7 @@ export default function VariableTable({ variables, onRowClick, highlightTerm, so
         return (
           <>
             {text.slice(0, idx)}
-            <mark style={{ background: '#fef08a', borderRadius: '2px', padding: '0 1px' }}>
+            <mark style={{ background: 'var(--badge-bg)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: '0 2px' }}>
               {text.slice(idx, idx + token.length)}
             </mark>
             {text.slice(idx + token.length)}
@@ -77,9 +77,12 @@ export default function VariableTable({ variables, onRowClick, highlightTerm, so
 
   const hasPaperTitle = variables?.some(v => v.paper_title)
 
+  // When stickyHeader is set the parent owns horizontal+vertical scrolling, so this
+  // wrapper must NOT create its own scroll context (overflow-x:auto would force
+  // overflow-y:auto, capping its height to content and breaking `position: sticky`).
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={tableStyle} role="grid">
+    <div style={stickyHeader ? undefined : { overflowX: 'auto' }}>
+      <table style={tableStyle} className="variables-table" role="grid">
         <thead>
           <tr>
             <th style={thSortable} onClick={() => onSort?.('name')}>
@@ -96,7 +99,9 @@ export default function VariableTable({ variables, onRowClick, highlightTerm, so
                 Paper{sortIndicator('paper_title')}
               </th>
             )}
-            <th style={thStyle} className="col-source-file">Source File</th>
+            {!hideSourceFile && (
+              <th style={thStyle} className="col-source-file">Source File</th>
+            )}
             <th style={thSortable} onClick={() => onSort?.('stat_n')}>
               N{sortIndicator('stat_n')}
             </th>
@@ -148,9 +153,11 @@ export default function VariableTable({ variables, onRowClick, highlightTerm, so
                     {v.paper_title || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
                   </td>
                 )}
-                <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '11px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="col-source-file">
-                  {v.source_file}
-                </td>
+                {!hideSourceFile && (
+                  <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: '11px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="col-source-file">
+                    {v.source_file}
+                  </td>
+                )}
                 <td style={tdStyle}>{formatNum(stats.n ?? v.stat_n)}</td>
                 <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{meanOrRange}</td>
                 <td style={tdStyle}>{formatNum(stats.sd ?? v.stat_sd)}</td>

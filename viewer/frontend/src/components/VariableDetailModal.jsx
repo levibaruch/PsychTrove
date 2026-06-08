@@ -18,7 +18,7 @@ const overlayStyle = {
 
 const modalStyle = {
   background: 'var(--color-surface)',
-  borderRadius: '10px',
+  borderRadius: 'var(--radius)',
   width: 'min(720px, 95vw)',
   maxHeight: '85vh',
   display: 'flex',
@@ -82,7 +82,7 @@ function DownloadButton({ label, onClick }) {
       onClick={onClick}
       style={{
         padding: '7px 14px',
-        borderRadius: '6px',
+        borderRadius: 'var(--radius)',
         border: '1px solid var(--color-border)',
         background: 'var(--color-surface)',
         color: 'var(--color-text-primary)',
@@ -95,7 +95,7 @@ function DownloadButton({ label, onClick }) {
   )
 }
 
-export default function VariableDetailModal({ variableId, onClose, onDownload }) {
+export default function VariableDetailModal({ variableId, onClose, onDownload, onOpenPaper }) {
   const [tab, setTab] = useState('variable')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -160,6 +160,29 @@ export default function VariableDetailModal({ variableId, onClose, onDownload })
                   "{data.description}"
                 </div>
               )}
+              {data && (data.paper_title || data.paper_doi) && (
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 12px', marginTop: '8px', fontSize: '12px' }}>
+                  {data.paper_title && onOpenPaper && (
+                    <button
+                      onClick={() => onOpenPaper(data.paper_id)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-accent)', fontSize: '12px', textAlign: 'left', maxWidth: '420px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={`Open repository: ${data.paper_title}`}
+                    >
+                      <span style={{ fontWeight: 700, textDecoration: 'underline' }}>{data.paper_title}</span> &rarr;
+                    </button>
+                  )}
+                  {data.paper_title && !onOpenPaper && (
+                    <span style={{ color: 'var(--color-text-secondary)', maxWidth: '420px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={data.paper_title}>
+                      {data.paper_title}
+                    </span>
+                  )}
+                  {data.paper_doi && (
+                    <a href={data.paper_doi} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px' }}>
+                      View manuscript ↗
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
             <button
               ref={closeRef}
@@ -193,6 +216,23 @@ export default function VariableDetailModal({ variableId, onClose, onDownload })
 
         {/* Footer */}
         <div style={footerStyle}>
+          {onOpenPaper && data?.paper_id && (
+            <button
+              onClick={() => onOpenPaper(data.paper_id)}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--color-accent)',
+                background: 'var(--color-accent)',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+            >
+              Open repository &rarr;
+            </button>
+          )}
           <DownloadButton
             label="Download this data file"
             onClick={() => onDownload?.('variable', data?.variable_id)}
@@ -260,7 +300,7 @@ function ProvenanceTab({ data, ctx, stages, expanded, onToggleStage }) {
                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                     background: 'var(--color-surface-2)',
                     border: '1px solid var(--color-border)',
-                    borderRadius: '4px', padding: '2px 8px',
+                    borderRadius: 'var(--radius)', padding: '2px 8px',
                     fontFamily: 'var(--font-mono)', fontSize: '11px',
                   }} title={sv.description || ''}>
                     {sv.name}
@@ -281,7 +321,7 @@ function ProvenanceTab({ data, ctx, stages, expanded, onToggleStage }) {
           {stages.map(stage => (
             <div key={stage.id} style={{
               border: '1px solid var(--color-border)',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius)',
               marginBottom: '6px',
               overflow: 'hidden',
             }}>

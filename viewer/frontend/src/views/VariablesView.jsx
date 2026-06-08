@@ -27,7 +27,7 @@ function useDebounce(value, delay) {
   return debounced
 }
 
-export default function VariablesView() {
+export default function VariablesView({ onOpenPaper, onShowHelp }) {
   const [query, setQuery] = useState('')
   const [paperQuery, setPaperQuery] = useState('')
   const [colType, setColType] = useState('')
@@ -114,19 +114,19 @@ export default function VariablesView() {
   const rangeEnd = Math.min(page * pageSize, total)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       {/* Search bar */}
       <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
         <input
           type="search"
-          placeholder='Search variables… (AND/OR/NOT, "phrase", *wildcard*)'
+          placeholder='Search variables… (space = AND, "phrase", -exclude, or)'
           value={query}
           onChange={e => setQuery(e.target.value)}
           style={{
             width: '100%', height: '44px', fontSize: '15px',
             padding: '0 14px',
             border: '1px solid var(--color-border)',
-            borderRadius: '8px',
+            borderRadius: 'var(--radius)',
             background: 'var(--color-bg)',
             color: 'var(--color-text-primary)',
             outline: 'none',
@@ -135,6 +135,15 @@ export default function VariablesView() {
           onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-border-focus)' }}
           onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
         />
+        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+          Searches variable names, descriptions and sample values across every repository.{' '}
+          <button
+            onClick={onShowHelp}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-accent)', fontSize: '12px' }}
+          >
+            How search works ↗
+          </button>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
           <input
             type="search"
@@ -145,7 +154,7 @@ export default function VariablesView() {
               flex: '1 1 200px', height: '34px', fontSize: '13px',
               padding: '0 10px',
               border: '1px solid var(--color-border)',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius)',
               background: 'var(--color-bg)',
               color: 'var(--color-text-primary)',
               outline: 'none',
@@ -159,7 +168,7 @@ export default function VariablesView() {
               id="col-type-filter"
               value={colType}
               onChange={e => setColType(e.target.value)}
-              style={{ padding: '4px 8px', borderRadius: '5px', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
+              style={{ padding: '4px 8px', borderRadius: 'var(--radius)', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
             >
               <option value="">All types</option>
               {COL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -191,7 +200,7 @@ export default function VariablesView() {
               <select
                 value={pageSize}
                 onChange={e => setPageSize(Number(e.target.value))}
-                style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
+                style={{ padding: '2px 6px', borderRadius: 'var(--radius)', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
               >
                 {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -217,7 +226,7 @@ export default function VariablesView() {
               disabled={total === 0}
               onClick={() => handleDownload(dlBtnRef.current)}
               style={{
-                padding: '4px 12px', borderRadius: '6px',
+                padding: '4px 12px', borderRadius: 'var(--radius)',
                 border: '1px solid var(--color-border)',
                 background: 'var(--color-surface)', cursor: total === 0 ? 'not-allowed' : 'pointer',
                 fontSize: '12px', opacity: total === 0 ? 0.5 : 1,
@@ -227,8 +236,10 @@ export default function VariablesView() {
         </div>
       )}
 
-      {/* Results area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px' }}>
+      {/* Results area — owns scrolling so the table header can stay sticky.
+          minHeight:0 defeats the flex default (min-height:auto) that would otherwise
+          let this grow to its content and push scrolling up to the outer container. */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 24px 24px' }}>
         {!debouncedQuery ? (
           <EmptySearch />
         ) : loading ? (
@@ -248,6 +259,8 @@ export default function VariablesView() {
               sortCol={sortBy}
               sortDir={sortDir}
               onSort={handleSort}
+              stickyHeader
+              hideSourceFile
             />
           </div>
         )}
@@ -273,6 +286,7 @@ export default function VariablesView() {
         <VariableDetailModal
           variableId={modalVarId}
           onClose={() => setModalVarId(null)}
+          onOpenPaper={onOpenPaper ? (paperId) => { setModalVarId(null); onOpenPaper(paperId) } : undefined}
           onDownload={(type, idOrName) => {
             if (type === 'variable') {
               window.open(api.variableDownloadUrl(idOrName))
@@ -290,7 +304,7 @@ export default function VariablesView() {
 
 function paginationBtnStyle(disabled) {
   return {
-    padding: '3px 10px', borderRadius: '4px',
+    padding: '3px 10px', borderRadius: 'var(--radius)',
     border: '1px solid var(--color-border)',
     background: 'var(--color-surface)',
     cursor: disabled ? 'not-allowed' : 'pointer',

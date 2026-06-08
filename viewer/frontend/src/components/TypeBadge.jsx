@@ -1,51 +1,70 @@
 import React from 'react'
 
-const COL_TYPE_COLORS = {
-  continuous:                    { bg: '#dbeafe', text: '#1e40af', darkBg: '#1e3a5f', darkText: '#93c5fd' },
-  continuous_comma_decimal:      { bg: '#dbeafe', text: '#1e40af', darkBg: '#1e3a5f', darkText: '#93c5fd' },
-  continuous_outliers_excluded:  { bg: '#fef3c7', text: '#92400e', darkBg: '#3d2800', darkText: '#fcd34d' },
-  ordinal:                       { bg: '#e0e7ff', text: '#3730a3', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
-  categorical:                   { bg: '#d1fae5', text: '#065f46', darkBg: '#052e1c', darkText: '#6ee7b7' },
-  binary:                        { bg: '#fce7f3', text: '#9d174d', darkBg: '#3d0726', darkText: '#f9a8d4' },
-  date:                          { bg: '#cffafe', text: '#155e75', darkBg: '#082832', darkText: '#67e8f9' },
-  id:                            { bg: '#f3f4f6', text: '#374151', darkBg: '#1f2937', darkText: '#d1d5db' },
-  text:                          { bg: '#f3f4f6', text: '#374151', darkBg: '#1f2937', darkText: '#d1d5db' },
-  constant:                      { bg: '#f3f4f6', text: '#6b7280', darkBg: '#1f2937', darkText: '#6b7280' },
-  empty:                         { bg: '#f3f4f6', text: '#9ca3af', darkBg: '#1f2937', darkText: '#4b5563' },
-  unknown:                       { bg: '#fef3c7', text: '#92400e', darkBg: '#3d2800', darkText: '#fcd34d' },
-  llm_error:                     { bg: '#fee2e2', text: '#991b1b', darkBg: '#3b0000', darkText: '#fca5a5' },
+/*
+ * Muted badge palette lifted from the DataCheck report (.b-blue/.b-green/…).
+ * Desaturated paper tones rather than bright app colors. Dark variants keep
+ * the same hue family at low saturation.
+ */
+const HUES = {
+  blue:   { bg: '#e7edf3', text: '#2f4a63', darkBg: '#23303d', darkText: '#9db6cd' },
+  green:  { bg: '#e9efe8', text: '#38573b', darkBg: '#27332a', darkText: '#a3bda6' },
+  purple: { bg: '#ece9f1', text: '#4a3d63', darkBg: '#2e2a39', darkText: '#b6a9cd' },
+  teal:   { bg: '#e4eeec', text: '#2f5650', darkBg: '#22332f', darkText: '#9bc1ba' },
+  orange: { bg: '#f1ece1', text: '#7a5a2c', darkBg: '#352f23', darkText: '#c7ad84' },
+  indigo: { bg: '#e9eaf1', text: '#3d3f63', darkBg: '#292b39', darkText: '#a9accd' },
+  slate:  { bg: '#e9ecef', text: '#3a4452', darkBg: '#272d34', darkText: '#a6b0bc' },
+  gray:   { bg: '#eeeeee', text: '#3a3a3a', darkBg: '#2c2c2c', darkText: '#b0b0b0' },
+  pink:   { bg: '#f1e7ec', text: '#6b3a4d', darkBg: '#352730', darkText: '#caa3b3' },
+  red:    { bg: '#f1e3e3', text: '#7a2c2c', darkBg: '#352323', darkText: '#cb9b9b' },
 }
 
-const FILE_TYPE_COLORS = {
-  data:         { bg: '#dbeafe', text: '#1e40af', darkBg: '#1e3a5f', darkText: '#93c5fd' },
-  codebook:     { bg: '#d1fae5', text: '#065f46', darkBg: '#052e1c', darkText: '#6ee7b7' },
-  code:         { bg: '#e0e7ff', text: '#3730a3', darkBg: '#1e1b4b', darkText: '#a5b4fc' },
-  software:     { bg: '#ede9fe', text: '#4c1d95', darkBg: '#1f1245', darkText: '#c4b5fd' },
-  output:       { bg: '#fce7f3', text: '#9d174d', darkBg: '#3d0726', darkText: '#f9a8d4' },
-  supplemental: { bg: '#f3f4f6', text: '#374151', darkBg: '#1f2937', darkText: '#d1d5db' },
-  readme:       { bg: '#f3f4f6', text: '#6b7280', darkBg: '#1f2937', darkText: '#9ca3af' },
-  asset:        { bg: '#cffafe', text: '#155e75', darkBg: '#082832', darkText: '#67e8f9' },
-  other:        { bg: '#f3f4f6', text: '#9ca3af', darkBg: '#1f2937', darkText: '#6b7280' },
-  llm_error:    { bg: '#fee2e2', text: '#991b1b', darkBg: '#3b0000', darkText: '#fca5a5' },
+const COL_TYPE_HUE = {
+  continuous: 'blue',
+  continuous_comma_decimal: 'blue',
+  continuous_outliers_excluded: 'orange',
+  ordinal: 'indigo',
+  categorical: 'green',
+  binary: 'pink',
+  date: 'teal',
+  id: 'slate',
+  text: 'gray',
+  constant: 'gray',
+  empty: 'gray',
+  unknown: 'orange',
+  llm_error: 'red',
+}
+
+const FILE_TYPE_HUE = {
+  data: 'blue',
+  codebook: 'purple',
+  code: 'green',
+  software: 'indigo',
+  output: 'orange',
+  supplemental: 'teal',
+  readme: 'gray',
+  asset: 'teal',
+  other: 'gray',
+  llm_error: 'red',
 }
 
 const BADGE_STYLE = {
   display: 'inline-block',
-  borderRadius: '4px',
-  padding: '2px 7px',
+  borderRadius: 'var(--radius)',
+  padding: '1px 7px',
   fontSize: '11px',
-  fontWeight: 500,
+  fontWeight: 600,
   whiteSpace: 'nowrap',
+  border: '1px solid rgba(0,0,0,.12)',
 }
 
 export default function TypeBadge({ value, kind = 'col' }) {
-  const map = kind === 'file' ? FILE_TYPE_COLORS : COL_TYPE_COLORS
-  const colors = map[value] || { bg: '#f3f4f6', text: '#6b7280', darkBg: '#1f2937', darkText: '#9ca3af' }
+  const map = kind === 'file' ? FILE_TYPE_HUE : COL_TYPE_HUE
+  const hue = HUES[map[value]] || HUES.gray
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
   const style = {
     ...BADGE_STYLE,
-    backgroundColor: isDark ? colors.darkBg : colors.bg,
-    color: isDark ? colors.darkText : colors.text,
+    backgroundColor: isDark ? hue.darkBg : hue.bg,
+    color: isDark ? hue.darkText : hue.text,
   }
   const label = value || 'unknown'
   const title = value === 'llm_error'

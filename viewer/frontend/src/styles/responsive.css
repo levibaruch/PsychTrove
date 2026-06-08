@@ -1,5 +1,13 @@
+/* "Back to list" is redundant on desktop where the list is always visible. */
+.back-to-list-btn {
+  display: none;
+}
+
 /* Tablet: 768px–1023px */
 @media (max-width: 1023px) {
+  .back-to-list-btn {
+    display: block;
+  }
   .papers-split {
     flex-direction: column;
   }

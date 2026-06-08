@@ -62,8 +62,13 @@ function PaperCard({ paper, selected, onSelect, onDownload }) {
         <span>
           {paper.n_study_groups} {paper.n_study_groups === 1 ? 'study' : 'studies'} · {paper.n_variables?.toLocaleString()} vars · {paper.n_labelled_variables?.toLocaleString()} labelled
           {paper.has_ground_truth && (
-            <span style={{ marginLeft: '6px', background: 'var(--color-success)', color: '#fff', fontSize: '10px', fontWeight: 600, padding: '1px 5px', borderRadius: '4px' }}>
-              ✓ GT
+            <span title="Ground Truth: manually validated" style={{ marginLeft: '6px', background: 'var(--color-surface-2)', color: 'var(--color-success)', border: '1px solid var(--color-border)', fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: 'var(--radius)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              ✓ Validated
+            </span>
+          )}
+          {paper.has_code && (
+            <span title="Repository includes analysis code / scripts" style={{ marginLeft: '6px', background: 'var(--color-surface-2)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', fontSize: '10px', fontWeight: 700, padding: '1px 5px', borderRadius: 'var(--radius)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Code
             </span>
           )}
         </span>
@@ -72,7 +77,7 @@ function PaperCard({ paper, selected, onSelect, onDownload }) {
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             fontSize: '16px', color: 'var(--color-text-muted)',
-            width: '24px', height: '24px', borderRadius: '4px',
+            width: '24px', height: '24px', borderRadius: 'var(--radius)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: 0,
           }}
@@ -108,13 +113,27 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
     }
   }
 
+  // Hide the study description when it merely repeats the paper-level abstract —
+  // participants flagged that duplication as noise.
+  const dupOfPaper = sg.description && paper.description
+    && sg.description.trim() === paper.description.trim()
+  const showDesc = sg.description && !dupOfPaper
+
+  // We're already viewing the paper, so don't repeat its title on every row —
+  // show only the study identifier (or "Shared files" for the shared group).
+  const studyLabel = sg.study_group === 'shared'
+    ? 'Shared files'
+    : sg.study_group
+      ? `Study ${sg.study_group}`
+      : (sg.title || 'Study')
+
   const renderTitle = () => {
     return (
       <>
-        <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: sg.description ? '4px' : 0 }}>
-          {sg.title || sg.study_group}
+        <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: showDesc ? '4px' : 0 }}>
+          {studyLabel}
         </div>
-        {sg.description && (
+        {showDesc && (
           <div className="study-description" title={sg.description}>
             {sg.description}
           </div>
@@ -124,7 +143,7 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
   }
 
   return (
-    <div style={{ border: '1px solid var(--color-border)', borderRadius: '6px', marginBottom: '8px', overflow: 'hidden' }}>
+    <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', marginBottom: '8px', overflow: 'hidden' }}>
       <div
         onClick={handleExpand}
         style={{
@@ -136,16 +155,16 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
           {renderTitle()}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
-          <span style={{ color: sg.pipeline_status?.index_success ? 'var(--color-success)' : 'var(--color-error)', fontSize: '12px' }}>
-            Index {sg.pipeline_status?.index_success ? '✓' : '✗'}
-          </span>
-          <span style={{ color: sg.pipeline_status?.codebook_success ? 'var(--color-success)' : 'var(--color-error)', fontSize: '12px' }}>
-            Codebook {sg.pipeline_status?.codebook_success ? '✓' : '✗'}
-          </span>
           <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>
             {sg.n_variables?.toLocaleString()} vars · {sg.n_labelled?.toLocaleString()} labelled
           </span>
-          {labelInfo && (
+          {/* Indexing can never fail here — failed indexes are absent from the DB.
+              Only the codebook stage is worth surfacing, and only when it failed. */}
+          {sg.pipeline_status && !sg.pipeline_status.codebook_success && (
+            <span style={{ color: 'var(--color-error)', fontSize: '12px' }}>Codebook failed ✗</span>
+          )}
+          {/* The "✓ Labelled" ok-state duplicates the labelled count above; show only warnings. */}
+          {labelInfo && sg.pipeline_status?.label_status !== 'ok' && (
             <span style={{ fontSize: '11px', fontWeight: 500, color: labelInfo.color }}>
               {labelInfo.label}
             </span>
@@ -169,13 +188,10 @@ function StudyGroupRow({ paper, sg, onVarClick, onDownload }) {
             <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><LoadingSpinner /></div>
           ) : sgDetail ? (
             <>
-              {sgDetail.description && (
-                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>{sgDetail.description}</p>
-              )}
-              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Variables</div>
-              <VariableTable variables={sgDetail.variables} onRowClick={onVarClick} />
-              <div style={{ fontSize: '14px', fontWeight: 600, margin: '16px 0 8px' }}>Provenance</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Files</div>
               <ProvenanceTable rows={sgDetail.provenance} />
+              <div style={{ fontSize: '14px', fontWeight: 600, margin: '16px 0 8px' }}>Variables</div>
+              <VariableTable variables={sgDetail.variables} onRowClick={onVarClick} />
             </>
           ) : (
             <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>Failed to load study group details.</p>
@@ -195,7 +211,8 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
   const [paper, setPaper] = useState(null)
   const [loading, setLoading] = useState(false)
   const [allVars, setAllVars] = useState(null)
-  const [allVarsLoading, setAllVarsLoading] = useState(false)
+  const [allFiles, setAllFiles] = useState(null)
+  const [allLoading, setAllLoading] = useState(false)
   const [filterText, setFilterText] = useState('')
   const downloadRef = useRef(null)
 
@@ -205,23 +222,27 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
     setPaper(null)
     setTab('overview')
     setAllVars(null)
+    setAllFiles(null)
     api.paper(paperId).then(d => { setPaper(d); setLoading(false) }).catch(() => setLoading(false))
   }, [paperId])
 
-  const handleTabAllVars = () => {
-    setTab('allvars')
-    if (!allVars && !allVarsLoading) {
-      setAllVarsLoading(true)
-      Promise.all(
-        (paper?.study_groups || []).map(sg =>
-          api.studyGroup(paperId, sg.study_group)
-        )
-      ).then(results => {
-        const merged = results.flatMap(r => (r.variables || []).map(v => ({ ...v, study_group: r.study_group })))
-        setAllVars(merged)
-        setAllVarsLoading(false)
-      }).catch(() => setAllVarsLoading(false))
-    }
+  // All Files and All Variables both come from the per-study-group endpoint;
+  // fetch every group once and split the results.
+  const ensureAllGroups = () => {
+    if (allVars || allLoading) return
+    setAllLoading(true)
+    Promise.all(
+      (paper?.study_groups || []).map(sg => api.studyGroup(paperId, sg.study_group))
+    ).then(results => {
+      setAllVars(results.flatMap(r => (r.variables || []).map(v => ({ ...v, study_group: r.study_group }))))
+      setAllFiles(results.flatMap(r => (r.provenance || []).map(p => ({ ...p, study_group: r.study_group }))))
+      setAllLoading(false)
+    }).catch(() => setAllLoading(false))
+  }
+
+  const openAggregateTab = (key) => {
+    setTab(key)
+    ensureAllGroups()
   }
 
   if (!paperId) return <NoPaperSelected />
@@ -231,7 +252,7 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {showBackButton && (
-        <button onClick={onBack} style={{ margin: '12px 16px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: '13px', textAlign: 'left' }}>
+        <button onClick={onBack} className="back-to-list-btn" style={{ margin: '12px 16px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: '13px', textAlign: 'left' }}>
           ← Back to list
         </button>
       )}
@@ -242,13 +263,15 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
             {paper.authors.join(', ')}
           </p>
         )}
+        <CredibilityStrip paper={paper} />
         <div style={{ display: 'flex', gap: '0' }}>
-          {['Overview', 'Studies', 'All Variables'].map((t, i) => {
-            const key = ['overview', 'studies', 'allvars'][i]
+          {['Overview', 'Studies', 'All Files', 'All Variables'].map((t, i) => {
+            const key = ['overview', 'studies', 'allfiles', 'allvars'][i]
+            const isAggregate = key === 'allfiles' || key === 'allvars'
             return (
               <button
                 key={key}
-                onClick={() => key === 'allvars' ? handleTabAllVars() : setTab(key)}
+                onClick={() => isAggregate ? openAggregateTab(key) : setTab(key)}
                 style={{
                   padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
                   fontSize: '13px',
@@ -281,7 +304,7 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
                 <strong style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Keywords</strong>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '5px' }}>
                   {paper.keywords.map((k, i) => (
-                    <span key={i} style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '2px 8px', fontSize: '12px' }}>
+                    <span key={i} style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontSize: '12px' }}>
                       {k}
                     </span>
                   ))}
@@ -295,12 +318,12 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
               ref={downloadRef}
               onClick={() => onPaperDownload(paper.paper_id, downloadRef.current)}
               style={{
-                alignSelf: 'flex-start', padding: '8px 16px', borderRadius: '6px',
+                alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 'var(--radius)',
                 border: '1px solid var(--color-border)', background: 'var(--color-surface)',
                 cursor: 'pointer', fontSize: '13px',
               }}
             >
-              ⬇ Download full paper
+              ⬇ Download full repository
             </button>
           </div>
         )}
@@ -317,10 +340,19 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
             ))}
           </div>
         )}
+        {tab === 'allfiles' && (
+          <div>
+            {allLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}><LoadingSpinner /></div>
+            ) : allFiles ? (
+              <ProvenanceTable rows={allFiles} />
+            ) : null}
+          </div>
+        )}
         {tab === 'allvars' && (
           <div>
             {allVars && <VariableFilter value={filterText} onChange={setFilterText} />}
-            {allVarsLoading ? (
+            {allLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}><LoadingSpinner /></div>
             ) : allVars ? (
               <FilteredVariables variables={allVars} filterText={filterText} onRowClick={onVarClick} />
@@ -339,7 +371,39 @@ function FilteredVariables({ variables, filterText, onRowClick }) {
     return <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', padding: '16px 0' }}>No variables match your filter.</p>
   }
 
-  return <VariableTable variables={filtered} onRowClick={onRowClick} />
+  return <VariableTable variables={filtered} onRowClick={onRowClick} stickyHeader />
+}
+
+// Quality / context cues a researcher uses to judge a repository's credibility.
+function CredibilityStrip({ paper }) {
+  const gt = paper.has_ground_truth
+  const manuscript = paper.doi
+  const n = paper.max_participant_n
+
+  const chip = (color, content, title) => (
+    <span title={title} style={{
+      display: 'inline-flex', alignItems: 'center', gap: '5px',
+      background: 'var(--color-surface-2)', color,
+      border: '1px solid var(--color-border)', borderLeft: `3px solid ${color}`,
+      borderRadius: 'var(--radius)', padding: '2px 9px', fontSize: '12px', fontWeight: 700,
+    }}>{content}</span>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', margin: '0 0 12px' }}>
+      {gt
+        ? chip('var(--color-success)', '✓ Manually validated', 'Ground Truth: a person hand-checked this repository for validity, so you do not have to re-verify it yourself.')
+        : chip('var(--color-text-muted)', 'Not hand-validated', 'No Ground Truth tag: this repository has not been manually checked for validity.')}
+      {manuscript
+        ? <a href={manuscript} target="_blank" rel="noopener noreferrer"
+             title="Open the connected manuscript to assess the methodology behind this data"
+             style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: 'var(--color-accent)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderLeft: '3px solid var(--color-accent)', borderRadius: 'var(--radius)', padding: '2px 9px', textDecoration: 'none' }}>
+            Linked manuscript &rarr;
+          </a>
+        : chip('var(--color-text-muted)', 'No linked manuscript', 'No DOI/manuscript recorded for this repository.')}
+      {n != null && chip('var(--color-text-secondary)', `N up to ${n.toLocaleString()}`, 'Maximum observed sample size across this repository’s variables')}
+    </div>
+  )
 }
 
 function ExpandableText({ text, maxLines }) {
@@ -367,13 +431,19 @@ function ExpandableText({ text, maxLines }) {
 // PapersView (main)
 // ──────────────────────────────────────────────────────────────────────────────
 
-export default function PapersView() {
+export default function PapersView({ openPaperReq }) {
   const [papers, setPapers] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [hasLabels, setHasLabels] = useState(false)
   const [hasGT, setHasGT] = useState(false)
+  const [hasCode, setHasCode] = useState(false)
+  const [minN, setMinN] = useState(null)
+  const [minVars, setMinVars] = useState(null)
+  const [sortBy, setSortBy] = useState('title')
+  const [sortDir, setSortDir] = useState('asc')
+  const [showFilters, setShowFilters] = useState(false)
   const [selectedPaper, setSelectedPaper] = useState(null)
   const [selectedPaperId, setSelectedPaperId] = useState(null)
   const [showDetail, setShowDetail] = useState(false)
@@ -395,18 +465,42 @@ export default function PapersView() {
     if (query) params.q = query
     if (hasLabels) params.has_labels = true
     if (hasGT) params.has_ground_truth = true
+    if (hasCode) params.has_code = true
+    if (minN != null) params.min_n = minN
+    if (minVars != null) params.min_vars = minVars
+    if (sortBy) { params.sort_by = sortBy; params.sort_dir = sortDir }
     api.papers(params).then(d => {
       setPapers(d.papers || [])
       setTotal(d.total || 0)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [query, hasLabels, hasGT])
+  }, [query, hasLabels, hasGT, hasCode, minN, minVars, sortBy, sortDir])
+
+  const activeFilterCount =
+    (hasLabels ? 1 : 0) + (hasGT ? 1 : 0) + (hasCode ? 1 : 0) +
+    (minN != null ? 1 : 0) + (minVars != null ? 1 : 0)
+
+  const clearFilters = () => {
+    setHasLabels(false)
+    setHasGT(false)
+    setHasCode(false)
+    setMinN(null)
+    setMinVars(null)
+  }
 
   const handleSelectPaper = (paper) => {
     setSelectedPaper(paper)
     setSelectedPaperId(paper.paper_id)
     setShowDetail(true)
   }
+
+  // Open a paper requested from another view (e.g. a variable result).
+  useEffect(() => {
+    if (!openPaperReq?.paperId) return
+    setSelectedPaper(null)
+    setSelectedPaperId(openPaperReq.paperId)
+    setShowDetail(true)
+  }, [openPaperReq])
 
   const handlePaperDownload = async (paperId, anchor) => {
     setDownloadAnchor(anchor)
@@ -440,7 +534,7 @@ export default function PapersView() {
   }
 
   return (
-    <div className="papers-split" style={{ display: 'flex', height: 'calc(100vh - 56px)' }}>
+    <div className="papers-split" style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%' }}>
       {/* Left panel */}
       <div
         className={`papers-list-panel ${showDetail ? 'hidden-mobile' : ''}`}
@@ -454,27 +548,110 @@ export default function PapersView() {
         <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)' }}>
           <input
             type="search"
-            placeholder="🔍 Search papers…"
+            placeholder="Search papers…"
             value={query}
             onChange={e => setQuery(e.target.value)}
             style={{
-              width: '100%', padding: '7px 10px',
+              width: '100%', height: '40px', padding: '0 12px',
               border: '1px solid var(--color-border)',
-              borderRadius: '6px', fontSize: '13px',
+              borderRadius: 'var(--radius)', fontSize: '15px',
               background: 'var(--color-bg)',
               color: 'var(--color-text-primary)',
               outline: 'none',
             }}
+            onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-border-focus)' }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
           />
-          <div style={{ display: 'flex', gap: '14px', marginTop: '8px', fontSize: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={hasLabels} onChange={e => setHasLabels(e.target.checked)} />
-              Labels
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={hasGT} onChange={e => setHasGT(e.target.checked)} />
-              GT
-            </label>
+          {/* Sort + Filters trigger */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', fontSize: '12px' }}>
+            <select
+              id="paper-sort"
+              aria-label="Sort papers"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 'var(--radius)', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
+            >
+              <option value="title">Sort: Title</option>
+              <option value="n_participants">Sort: Participants (N)</option>
+              <option value="n_variables">Sort: Variables</option>
+              <option value="n_labelled">Sort: Labelled variables</option>
+            </select>
+            <button
+              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+              style={{ padding: '5px 9px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-secondary)', fontSize: '12px' }}
+            >
+              {sortDir === 'asc' ? '↑' : '↓'}
+            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowFilters(s => !s)}
+                title="Filter papers"
+                style={{
+                  padding: '5px 10px', borderRadius: 'var(--radius)',
+                  border: `1px solid ${activeFilterCount ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  background: showFilters ? 'var(--color-surface-2)' : 'var(--color-surface)',
+                  color: activeFilterCount ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                  fontSize: '12px', fontWeight: activeFilterCount ? 700 : 400, whiteSpace: 'nowrap',
+                }}
+              >
+                Filters{activeFilterCount ? ` (${activeFilterCount})` : ''} ▾
+              </button>
+              {showFilters && (
+                <>
+                  {/* click-away */}
+                  <div onClick={() => setShowFilters(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 41,
+                    width: '260px', background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)', borderRadius: 'var(--radius)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.18)', padding: '12px 14px',
+                    display: 'flex', flexDirection: 'column', gap: '12px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span className="eyebrow">Filter</span>
+                      {activeFilterCount > 0 && (
+                        <button onClick={clearFilters} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: '12px', padding: 0 }}>
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      Minimum participants (N)
+                      <input
+                        type="number" min="0" placeholder="any"
+                        value={minN ?? ''}
+                        onChange={e => setMinN(e.target.value === '' ? null : Math.max(0, Number(e.target.value)))}
+                        style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                      />
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      Minimum variables
+                      <input
+                        type="number" min="0" placeholder="any"
+                        value={minVars ?? ''}
+                        onChange={e => setMinVars(e.target.value === '' ? null : Math.max(0, Number(e.target.value)))}
+                        style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                      />
+                    </label>
+                    <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '13px' }} title="Has at least one labelled variable">
+                        <input type="checkbox" checked={hasLabels} onChange={e => setHasLabels(e.target.checked)} />
+                        Has labelled variables
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '13px' }} title="Ground Truth: manually validated">
+                        <input type="checkbox" checked={hasGT} onChange={e => setHasGT(e.target.checked)} />
+                        Manually validated (GT)
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', fontSize: '13px' }} title="Repository includes analysis code / scripts">
+                        <input type="checkbox" checked={hasCode} onChange={e => setHasCode(e.target.checked)} />
+                        Includes analysis code
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -530,6 +707,12 @@ export default function PapersView() {
         <VariableDetailModal
           variableId={modalVarId}
           onClose={() => setModalVarId(null)}
+          onOpenPaper={(paperId) => {
+            setModalVarId(null)
+            setSelectedPaper(null)
+            setSelectedPaperId(paperId)
+            setShowDetail(true)
+          }}
           onDownload={(type, idOrName) => {
             if (type === 'variable') {
               window.open(api.variableDownloadUrl(idOrName))

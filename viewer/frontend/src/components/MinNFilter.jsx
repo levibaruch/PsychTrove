@@ -14,7 +14,7 @@ export default function MinNFilter({ value, onChange }) {
         style={{
           width: '80px',
           padding: '4px 8px',
-          borderRadius: '5px',
+          borderRadius: 'var(--radius)',
           fontSize: '12px',
           border: '1px solid var(--color-border)',
           background: 'var(--color-bg)',

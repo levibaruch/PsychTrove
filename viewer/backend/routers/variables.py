@@ -226,7 +226,8 @@ def _get_variable_detail(variable_id: int) -> dict | None:
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT v.*, sg.study_group, sg.study_dir, p.paper_id as pid
+            SELECT v.*, sg.study_group, sg.study_dir,
+                   p.paper_id as pid, p.title as paper_title, p.doi as paper_doi
             FROM variables v
             JOIN study_groups sg ON v.study_group_id = sg.id
             JOIN papers p ON v.paper_id = p.paper_id
@@ -251,6 +252,8 @@ def _get_variable_detail(variable_id: int) -> dict | None:
         return {
             "variable_id": row["id"],
             "paper_id": str(row["pid"]),
+            "paper_title": row["paper_title"],
+            "paper_doi": row["paper_doi"],
             "study_group": row["study_group"],
             "name": row["name"],
             "description": row["description"],

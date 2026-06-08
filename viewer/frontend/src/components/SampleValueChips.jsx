@@ -5,7 +5,7 @@ const chipStyle = {
   display: 'inline-block',
   background: 'var(--color-surface-2)',
   border: '1px solid var(--color-border)',
-  borderRadius: '4px',
+  borderRadius: 'var(--radius)',
   padding: '2px 8px',
   fontFamily: 'var(--font-mono)',
   fontSize: '12px',
