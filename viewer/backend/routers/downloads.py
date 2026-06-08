@@ -349,8 +349,8 @@ def _resolve_variable_csv_files(
                 import json
                 with open(sidecar_json_path, encoding="utf-8") as f:
                     sidecar = json.load(f)
-                conv = sidecar.get("metacheck:conversion", {}) or {}
-                orig = sidecar.get("metacheck:original_file", {}) or {}
+                conv = sidecar.get("datacheck:conversion", {}) or {}
+                orig = sidecar.get("datacheck:original_file", {}) or {}
                 n_rows = conv.get("rows_written")
                 n_columns = conv.get("columns_written")
                 original_rel_path = orig.get("rel_path", source_file)

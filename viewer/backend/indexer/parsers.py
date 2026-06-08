@@ -33,15 +33,36 @@ def _clean_title(title: str) -> str:
     return title
 
 
+def _clean_doi(val) -> str | None:
+    """Normalise the identifier to a clean DOI URL.
+
+    Upstream SAGE identifiers glue journal cruft onto the DOI, e.g.
+    'https://doi.org/10.1177/0956797614542274pss.sagepub.' — strip it.
+    """
+    if not val:
+        return None
+    import re
+    s = str(val).strip()
+    # Extract the DOI core (10.xxxx/...) if a URL/prefix wraps it.
+    m = re.search(r'10\.\d{4,9}/[^\s"<>]+', s)
+    doi = m.group(0) if m else s
+    # Drop trailing publisher slug glued onto the suffix (pss.sagepub., sagepub…).
+    doi = re.sub(r'(?i)(pss)?\.?sagepub.*$', '', doi)
+    doi = doi.rstrip('.,;/ ')
+    if not doi:
+        return None
+    return f'https://doi.org/{doi}'
+
+
 def _extract_authors(author_field) -> str | None:
-    """Convert schema:author array to JSON string of names."""
+    """Convert author array to JSON string of names."""
     if not author_field:
         return None
     if isinstance(author_field, list):
         names = []
         for a in author_field:
             if isinstance(a, dict):
-                name = a.get("schema:name") or a.get("name")
+                name = a.get("name")
                 if name:
                     names.append(str(name))
         return json.dumps(names)
@@ -49,7 +70,7 @@ def _extract_authors(author_field) -> str | None:
 
 
 def _extract_keywords(kw_field) -> str | None:
-    """Convert schema:keywords array to JSON string."""
+    """Convert keywords array to JSON string."""
     if not kw_field:
         return None
     if isinstance(kw_field, list):
@@ -75,30 +96,42 @@ def parse_dataset_description(path: Path) -> dict:
         logger.error("Failed to parse %s: %s", path, e)
         return {}
 
-    raw_name = _safe_str(data.get("schema:name", "")) or ""
+    raw_name = _safe_str(data.get("name", "")) or ""
+
+    # Journal / citation metadata lives under isPartOf + datacheck:* keys.
+    journal = data.get("isPartOf") or {}
+    publication_year = (
+        _safe_str(data.get("datacheck:publication_year"))
+        or _safe_str(data.get("datePublished"))
+    )
 
     # Paper-level metadata
     paper_meta = {
-        "paper_id": str(data.get("metacheck:paper_id", path.parent.parent.name)),
+        "paper_id": str(data.get("datacheck:paper_id", path.parent.parent.name)),
         "title": _clean_title(raw_name),
-        "description": _safe_str(data.get("schema:description")),
-        "authors": _extract_authors(data.get("schema:author")),
-        "doi": _safe_str(data.get("schema:identifier")),
-        "keywords": _extract_keywords(data.get("schema:keywords")),
+        "description": _safe_str(data.get("description")),
+        "authors": _extract_authors(data.get("author")),
+        "doi": _clean_doi(data.get("identifier")),
+        "keywords": _extract_keywords(data.get("keywords")),
+        "journal": _safe_str(journal.get("name")) if isinstance(journal, dict) else None,
+        "publication_year": publication_year,
+        "volume": _safe_str(data.get("datacheck:volume")),
+        "issue": _safe_str(data.get("datacheck:issue")),
+        "pagination": _safe_str(data.get("datacheck:pagination")),
         "pipeline_version": _safe_str(
-            data.get("metacheck:pipeline_version")
+            data.get("datacheck:pipeline_version")
         ),
-        "conversion_date": _safe_str(data.get("metacheck:conversion_date")),
+        "conversion_date": _safe_str(data.get("datacheck:conversion_date")),
     }
 
     # Study-level metadata
-    pipeline_status = data.get("metacheck:pipeline_status", {}) or {}
-    source_repo = data.get("metacheck:source_repository", {}) or {}
+    pipeline_status = data.get("datacheck:pipeline_status", {}) or {}
+    source_repo = data.get("datacheck:source_repository", {}) or {}
 
     study_meta = {
-        "study_group": _safe_str(data.get("metacheck:study_group", "")),
+        "study_group": _safe_str(data.get("datacheck:study_group", "")),
         "title": raw_name.lstrip('.').strip(),
-        "description": _safe_str(data.get("schema:description")),
+        "description": _safe_str(data.get("description")),
         "index_success": 1 if pipeline_status.get("index_success") else 0,
         "codebook_success": 1 if pipeline_status.get("codebook_success") else 0,
         "n_files_total": pipeline_status.get("n_files_total"),
@@ -106,26 +139,26 @@ def parse_dataset_description(path: Path) -> dict:
         "n_columns": pipeline_status.get("n_columns"),
         "n_labelled_columns": int(pipeline_status.get("n_labelled_columns", 0) or 0),
         "label_status": _safe_str(pipeline_status.get("label_status")),
-        "shared_resources": _safe_str(data.get("metacheck:shared_resources")),
-        "shared_files": data.get("metacheck:shared_files"),
+        "shared_resources": _safe_str(data.get("datacheck:shared_resources")),
+        "shared_files": data.get("datacheck:shared_files"),
         "source_platform": _safe_str(source_repo.get("platform")),
         "source_download_path": _safe_str(source_repo.get("download_path")),
-        "schema_version": _safe_str(data.get("schema:schemaVersion")),
+        "schema_version": _safe_str(data.get("schemaVersion")),
     }
 
     # Variables
     variables = []
-    for var in data.get("schema:variableMeasured", []) or []:
+    for var in data.get("variableMeasured", []) or []:
         if not isinstance(var, dict):
             continue
 
-        stats = var.get("metacheck:statistics") or {}
+        stats = var.get("datacheck:statistics") or {}
         variables.append({
             "name": _safe_str(var.get("name", "")),
             "description": _safe_str(var.get("description")),
-            "col_type": _safe_str(var.get("metacheck:col_type", "unknown")),
-            "source_file": _safe_str(var.get("metacheck:source_file", "")),
-            "sample_values": _safe_str(var.get("metacheck:sample_values")),
+            "col_type": _safe_str(var.get("datacheck:col_type", "unknown")),
+            "source_file": _safe_str(var.get("datacheck:source_file", "")),
+            "sample_values": _safe_str(var.get("datacheck:sample_values")),
             "value_pattern": _safe_str(var.get("valuePattern")),
             "min_value": var.get("minValue"),
             "max_value": var.get("maxValue"),

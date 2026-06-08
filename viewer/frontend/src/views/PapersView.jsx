@@ -51,8 +51,13 @@ function PaperCard({ paper, selected, onSelect, onDownload }) {
         {paper.title}
       </div>
       {authorText && (
-        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {authorText}
+        </div>
+      )}
+      {(paper.journal || paper.publication_year) && (
+        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '6px', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {[paper.journal, paper.publication_year].filter(Boolean).join(' · ')}
         </div>
       )}
       <div style={{ fontSize: '12px', color: 'var(--color-accent)', fontWeight: 500, marginBottom: '6px' }} title="Maximum observed sample size across variables">
@@ -259,10 +264,11 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
       <div style={{ padding: '16px 20px 0', borderBottom: '1px solid var(--color-border)' }}>
         <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>{paper.title}</h2>
         {paper.authors?.length > 0 && (
-          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
             {paper.authors.join(', ')}
           </p>
         )}
+        <Citation paper={paper} header />
         <CredibilityStrip paper={paper} />
         <div style={{ display: 'flex', gap: '0' }}>
           {['Overview', 'Studies', 'All Files', 'All Variables'].map((t, i) => {
@@ -293,12 +299,7 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
             {paper.description && (
               <ExpandableText text={paper.description} maxLines={4} />
             )}
-            {paper.doi && (
-              <p style={{ fontSize: '13px' }}>
-                <strong>DOI:</strong>{' '}
-                <a href={paper.doi} target="_blank" rel="noopener noreferrer">{paper.doi} ↗</a>
-              </p>
-            )}
+            <PublicationDetails paper={paper} />
             {paper.keywords?.length > 0 && (
               <div>
                 <strong style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Keywords</strong>
@@ -402,6 +403,69 @@ function CredibilityStrip({ paper }) {
           </a>
         : chip('var(--color-text-muted)', 'No linked manuscript', 'No DOI/manuscript recorded for this repository.')}
       {n != null && chip('var(--color-text-secondary)', `N up to ${n.toLocaleString()}`, 'Maximum observed sample size across this repository’s variables')}
+    </div>
+  )
+}
+
+function formatCitation({ journal, publication_year, volume, issue, pagination }) {
+  // Build "Journal, Year, Vol(Issue), pp. Pages" from whatever fields exist.
+  let volIssue = volume || ''
+  if (issue) volIssue += `(${issue})`
+  const parts = []
+  if (journal) parts.push(journal)
+  if (publication_year) parts.push(String(publication_year))
+  if (volIssue) parts.push(volIssue)
+  if (pagination) parts.push(`pp. ${pagination}`)
+  return parts.join(', ')
+}
+
+function Citation({ paper, header }) {
+  // Compact one-line journal citation. Used in the always-visible paper header.
+  const text = formatCitation(paper)
+  if (!text) return null
+  return (
+    <p style={{
+      fontSize: header ? '12px' : '13px',
+      fontStyle: 'italic',
+      color: 'var(--color-text-secondary)',
+      marginBottom: header ? '8px' : 0,
+    }}>{text}</p>
+  )
+}
+
+function PublicationDetails({ paper }) {
+  // Labelled publication-metadata panel for the Overview tab.
+  const { journal, publication_year, volume, issue, pagination, doi, authors } = paper
+  const rows = [
+    ['Authors', authors?.length > 0 ? authors.join(', ') : null],
+    ['Journal', journal],
+    ['Year', publication_year],
+    ['Volume', volume],
+    ['Issue', issue],
+    ['Pages', pagination],
+  ].filter(([, v]) => v)
+
+  if (rows.length === 0 && !doi) return null
+
+  return (
+    <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: '12px 14px', background: 'var(--color-surface-2)' }}>
+      <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+        Publication
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: '14px', rowGap: '5px', fontSize: '13px' }}>
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <span style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+            <span>{value}</span>
+          </React.Fragment>
+        ))}
+        {doi && (
+          <React.Fragment key="doi">
+            <span style={{ color: 'var(--color-text-muted)' }}>DOI</span>
+            <a href={doi} target="_blank" rel="noopener noreferrer" style={{ wordBreak: 'break-all' }}>{doi} ↗</a>
+          </React.Fragment>
+        )}
+      </div>
     </div>
   )
 }

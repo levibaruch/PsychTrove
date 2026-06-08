@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS papers (
     authors           TEXT,
     doi               TEXT,
     keywords          TEXT,
+    journal           TEXT,
+    publication_year  TEXT,
+    volume            TEXT,
+    issue             TEXT,
+    pagination        TEXT,
     n_study_groups    INTEGER NOT NULL DEFAULT 0,
     has_ground_truth  INTEGER NOT NULL DEFAULT 0,
     conversion_date   TEXT,
@@ -87,6 +92,12 @@ CREATE TABLE IF NOT EXISTS _meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS journal TEXT;
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS publication_year TEXT;
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS volume TEXT;
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS issue TEXT;
+ALTER TABLE papers ADD COLUMN IF NOT EXISTS pagination TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_papers_has_ground_truth ON papers(has_ground_truth);
 CREATE INDEX IF NOT EXISTS idx_study_groups_paper_id ON study_groups(paper_id);

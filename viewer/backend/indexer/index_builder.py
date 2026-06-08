@@ -33,15 +33,22 @@ def _insert_or_update_paper(cur, paper_meta: dict) -> None:
     cur.execute(
         """
         INSERT INTO papers (paper_id, title, description, authors, doi, keywords,
+                            journal, publication_year, volume, issue, pagination,
                             conversion_date, pipeline_version)
         VALUES (%(paper_id)s, %(title)s, %(description)s, %(authors)s, %(doi)s,
-                %(keywords)s, %(conversion_date)s, %(pipeline_version)s)
+                %(keywords)s, %(journal)s, %(publication_year)s, %(volume)s,
+                %(issue)s, %(pagination)s, %(conversion_date)s, %(pipeline_version)s)
         ON CONFLICT(paper_id) DO UPDATE SET
             title             = EXCLUDED.title,
             description       = EXCLUDED.description,
             authors           = COALESCE(EXCLUDED.authors, papers.authors),
             doi               = COALESCE(EXCLUDED.doi, papers.doi),
             keywords          = COALESCE(EXCLUDED.keywords, papers.keywords),
+            journal           = COALESCE(EXCLUDED.journal, papers.journal),
+            publication_year  = COALESCE(EXCLUDED.publication_year, papers.publication_year),
+            volume            = COALESCE(EXCLUDED.volume, papers.volume),
+            issue             = COALESCE(EXCLUDED.issue, papers.issue),
+            pagination        = COALESCE(EXCLUDED.pagination, papers.pagination),
             conversion_date   = COALESCE(EXCLUDED.conversion_date, papers.conversion_date),
             pipeline_version  = COALESCE(EXCLUDED.pipeline_version, papers.pipeline_version)
         """,

@@ -174,7 +174,7 @@ def _resolve_sidecar(
             try:
                 with open(c, encoding="utf-8") as f:
                     sidecar = json.load(f)
-                rel_path = sidecar.get("metacheck:original_file", {}).get("rel_path", "")
+                rel_path = sidecar.get("datacheck:original_file", {}).get("rel_path", "")
                 if rel_path and Path(rel_path).name == Path(source_file).name:
                     target = c
                     break
@@ -190,9 +190,9 @@ def _resolve_sidecar(
     except Exception:
         return None
 
-    orig = sidecar.get("metacheck:original_file", {}) or {}
-    conv = sidecar.get("metacheck:conversion", {}) or {}
-    all_vars = sidecar.get("schema:variableMeasured", []) or []
+    orig = sidecar.get("datacheck:original_file", {}) or {}
+    conv = sidecar.get("datacheck:conversion", {}) or {}
+    all_vars = sidecar.get("variableMeasured", []) or []
 
     return {
         "original_file": {
@@ -211,7 +211,7 @@ def _resolve_sidecar(
         "sibling_variables": [
             {
                 "name": v.get("name"),
-                "col_type": v.get("metacheck:col_type"),
+                "col_type": v.get("datacheck:col_type"),
                 "description": v.get("description"),
             }
             for v in all_vars
