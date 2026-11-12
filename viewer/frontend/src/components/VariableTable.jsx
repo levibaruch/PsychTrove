@@ -106,7 +106,7 @@ export default function VariableTable({ variables, onRowClick, highlightTerm, so
               N{sortIndicator('stat_n')}
             </th>
             <th style={thSortable} onClick={() => onSort?.('stat_mean')}>
-              Mean / Range{sortIndicator('stat_mean')}
+              Mean{sortIndicator('stat_mean')}
             </th>
             <th style={thSortable} onClick={() => onSort?.('stat_sd')}>
               SD{sortIndicator('stat_sd')}

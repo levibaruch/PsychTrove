@@ -159,11 +159,11 @@ export default function PipelineTransparencyPanel({ onClose }) {
 
             <Section title="Data Quality Indicators">
               <ul style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.8, paddingLeft: '16px' }}>
-                <li><strong>[✓ Reviewed]</strong> — Ground truth validated: the file was manually reviewed by a human annotator</li>
-                <li><strong>[⚠ LLM Error]</strong> — The LLM classifier failed on all retry attempts; classification could not be determined</li>
-                <li><strong>[✓ Labelled]</strong> — All variables have codebook labels matched</li>
-                <li><strong>[No matches]</strong> — Codebook exists but no variables matched</li>
-                <li><strong>[No codebook]</strong> — No codebook file was found for this study group</li>
+                <li><strong>[✓ Reviewed]</strong>: ground truth validated. The file was manually reviewed by a human annotator</li>
+                <li><strong>[⚠ LLM Error]</strong>: the LLM classifier failed on all retry attempts; classification could not be determined</li>
+                <li><strong>[✓ Labelled]</strong>: all variables have codebook labels matched</li>
+                <li><strong>[No matches]</strong>: codebook exists but no variables matched</li>
+                <li><strong>[No codebook]</strong>: no codebook file was found for this study group</li>
               </ul>
             </Section>
           </>

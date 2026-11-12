@@ -79,21 +79,21 @@ export default function App() {
     api.corpusStats().then(setStats).catch(() => {})
   }, [indexed])
 
-  // Show the welcome/help guide automatically on a user's first visit.
+  // Show the welcome/help guide automatically on the first open of each session.
   useEffect(() => {
     if (!indexed) return
     try {
-      if (!localStorage.getItem('psychtrove_welcomed')) {
+      if (!sessionStorage.getItem('psychtrove_welcomed')) {
         setHelpFirstVisit(true)
         setShowHelp(true)
       }
-    } catch { /* localStorage unavailable — skip */ }
+    } catch { /* sessionStorage unavailable — skip */ }
   }, [indexed])
 
   const closeHelp = () => {
     setShowHelp(false)
     if (helpFirstVisit) {
-      try { localStorage.setItem('psychtrove_welcomed', '1') } catch { /* ignore */ }
+      try { sessionStorage.setItem('psychtrove_welcomed', '1') } catch { /* ignore */ }
       setHelpFirstVisit(false)
     }
   }

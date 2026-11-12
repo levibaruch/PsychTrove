@@ -33,8 +33,8 @@ const SEARCH_COMPARISON = [
     'Searches variable names, descriptions and sample values.',
   ],
   [
-    'Plain text match — your query is matched as typed, no special operators.',
-    'Full-text match — words match their root form (creativity also finds creative). Combine terms: space = AND, "phrase", -exclude, or.',
+    'Plain text match: your query is matched as typed, no special operators.',
+    'Full-text match: words match their root form (creativity also finds creative). Combine terms: space = AND, "phrase", -exclude, or.',
   ],
   [
     'Refine with Sort and Filters (participants, variables, validated, code).',
@@ -47,12 +47,12 @@ const SEARCH_COMPARISON = [
 ]
 
 const GLOSSARY = [
-  ['Ground Truth (GT)', 'The repository was hand-checked by a person for validity. A GT tag means you do not have to re-verify the whole repository yourself — it is a trust/credibility signal.'],
+  ['Ground Truth (GT)', 'The repository was hand-checked by a person for validity. A GT tag means you do not have to re-verify the whole repository yourself.'],
   ['Labelled', 'The variable has a human-readable description/label attached. "Has description" filters to only labelled variables.'],
   ['Provenance', 'The record of where a data file came from and how DataCheck processed it: original path, original format, classification, and granularity.'],
-  ['Study group', 'One experiment/dataset within a repository. A repository can contain several. A group named "shared" holds files common to all groups, not a separate experiment.'],
+  ['Study group', 'One experiment within a repository. A repository can contain several. A group named "shared" holds files common to all groups, not a separate experiment.'],
   ['Variable type', 'DataCheck\'s classification of a column: continuous, ordinal, binary, categorical, date, id, text, etc.'],
-  ['Pipeline', 'DataCheck — the upstream tool that converts raw repositories into the standardized PsychDS form that PsychTrove indexes.'],
+  ['Pipeline', 'DataCheck: the upstream tool that converts raw repositories into the standardized PsychDS form that PsychTrove indexes.'],
 ]
 
 export default function HelpGlossary({ onClose, firstVisit = false }) {
@@ -85,23 +85,25 @@ export default function HelpGlossary({ onClose, firstVisit = false }) {
           <section>
             <h3 style={sectionTitle}>What it is</h3>
             <p style={paragraph}>
-              PsychTrove is a searchable index of psychology and social-science data repositories.
-              It lets you explore what was measured across many studies — and judge how reusable a
-              dataset is — without downloading each one first.
+              PsychTrove lets you search what was measured across many psychology and
+              social-science repositories, without downloading each one first. You can look up a
+              whole study, or search a single variable across the entire corpus, and judge how
+              usable a dataset is.
             </p>
             <p style={paragraph}>
-              It is the second half of a two-step pipeline. <strong>DataCheck</strong> takes a raw
-              repository, classifies every file, extracts the columns of each dataset, infers each
-              variable&rsquo;s type, matches columns to any codebook, and repackages everything into
-              the standardized <strong>PsychDS</strong> format. <strong>PsychTrove</strong> then
-              indexes those PsychDS outputs into a database and exposes them through this interface.
+              PsychTrove utilizes the output of <strong>DataCheck</strong>, which takes a raw
+              repository, classifies every file, extracts the columns of each tabular dataset,
+              determines the type of each variable, and matches those columns to any codebooks the
+              authors added, then re-packages everything into the standardized{' '}
+              <strong>PsychDS</strong> format. <strong>PsychTrove</strong> indexes those PsychDS
+              outputs and exposes them through this interface.
             </p>
             <p style={{ ...paragraph, marginBottom: '4px' }}>What you can do here:</p>
             <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-              <li>Search studies, or search individual variables across the whole corpus.</li>
-              <li>Judge credibility at a glance — manual validation, a linked manuscript, participant N.</li>
-              <li>Inspect a repository&rsquo;s files, variables and processing provenance.</li>
-              <li>Jump from any variable straight to its source repository, and download archives.</li>
+              <li>Search a study, or search individual variables across the whole corpus.</li>
+              <li>Easily find the attached manuscript of the repository, and how many participants it covers.</li>
+              <li>Follow what happened to each file: its type, its variables, and where an LLM was used along the way.</li>
+              <li>Jump from any variable straight to its source repository, and download the archive.</li>
             </ul>
           </section>
 
@@ -156,7 +158,7 @@ export default function HelpGlossary({ onClose, firstVisit = false }) {
               color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
             }}
           >
-            {firstVisit ? 'Got it — start exploring' : 'Close'}
+            {firstVisit ? 'Got it, start exploring' : 'Close'}
           </button>
         </div>
       </div>

@@ -53,6 +53,7 @@ _HAS_CODE_SQL = (
 # Whitelist of sort columns -> SQL expression. Guards against injection.
 _PAPER_SORT = {
     "title": "p.title",
+    "year": "p.publication_year",
     "n_participants": _MAX_N_SQL,
     "n_variables": _N_VARS_SQL,
     "n_labelled": _N_LABELLED_SQL,
@@ -63,6 +64,7 @@ def _get_papers(
     q: Optional[str], has_labels: Optional[bool],
     has_ground_truth: Optional[bool], has_code: Optional[bool],
     min_n: Optional[int], min_vars: Optional[int],
+    journal: Optional[str], year: Optional[str],
     sort_by: Optional[str], sort_dir: str,
     limit: int, offset: int,
 ) -> dict:
@@ -75,9 +77,18 @@ def _get_papers(
         if q:
             like = f"%{q}%"
             where_clauses.append(
-                "(p.title ILIKE %s OR p.description ILIKE %s OR p.keywords ILIKE %s OR p.authors ILIKE %s)"
+                "(p.title ILIKE %s OR p.description ILIKE %s OR p.keywords ILIKE %s "
+                "OR p.authors ILIKE %s OR p.journal ILIKE %s)"
             )
-            params.extend([like, like, like, like])
+            params.extend([like, like, like, like, like])
+
+        if journal:
+            where_clauses.append("p.journal = %s")
+            params.append(journal)
+
+        if year:
+            where_clauses.append("p.publication_year = %s")
+            params.append(year)
 
         if has_labels is True:
             where_clauses.append(
@@ -316,6 +327,33 @@ def _get_study_group_detail(paper_id: str, study_group: str) -> dict | None:
         conn.close()
 
 
+def _get_paper_facets() -> dict:
+    """Distinct journals and publication years for filter dropdowns."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT DISTINCT journal FROM papers "
+            "WHERE journal IS NOT NULL AND journal <> '' ORDER BY journal"
+        )
+        journals = [r["journal"] for r in cur.fetchall()]
+        cur.execute(
+            "SELECT DISTINCT publication_year FROM papers "
+            "WHERE publication_year IS NOT NULL AND publication_year <> '' "
+            "ORDER BY publication_year DESC"
+        )
+        years = [r["publication_year"] for r in cur.fetchall()]
+        return {"journals": journals, "years": years}
+    finally:
+        conn.close()
+
+
+@router.get("/papers/facets")
+async def paper_facets():
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _get_paper_facets)
+
+
 @router.get("/papers")
 async def list_papers(
     q: Optional[str] = Query(None),
@@ -324,6 +362,8 @@ async def list_papers(
     has_code: Optional[bool] = Query(None),
     min_n: Optional[int] = Query(None, ge=0),
     min_vars: Optional[int] = Query(None, ge=0),
+    journal: Optional[str] = Query(None),
+    year: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),
     sort_dir: str = Query("asc"),
     limit: int = Query(50, ge=1, le=500),
@@ -332,7 +372,7 @@ async def list_papers(
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         None, _get_papers, q, has_labels, has_ground_truth, has_code,
-        min_n, min_vars, sort_by, sort_dir, limit, offset,
+        min_n, min_vars, journal, year, sort_by, sort_dir, limit, offset,
     )
     return result
 

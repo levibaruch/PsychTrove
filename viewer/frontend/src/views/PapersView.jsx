@@ -299,7 +299,6 @@ function PaperDetail({ paperId, onVarClick, onSgDownload, onPaperDownload, showB
             {paper.description && (
               <ExpandableText text={paper.description} maxLines={4} />
             )}
-            <PublicationDetails paper={paper} />
             {paper.keywords?.length > 0 && (
               <div>
                 <strong style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Keywords</strong>
@@ -397,11 +396,11 @@ function CredibilityStrip({ paper }) {
         : chip('var(--color-text-muted)', 'Not hand-validated', 'No Ground Truth tag: this repository has not been manually checked for validity.')}
       {manuscript
         ? <a href={manuscript} target="_blank" rel="noopener noreferrer"
-             title="Open the connected manuscript to assess the methodology behind this data"
+             title="Open the connected publication to assess the methodology behind this data"
              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 700, color: 'var(--color-accent)', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderLeft: '3px solid var(--color-accent)', borderRadius: 'var(--radius)', padding: '2px 9px', textDecoration: 'none' }}>
-            Linked manuscript &rarr;
+            Linked publication &rarr;
           </a>
-        : chip('var(--color-text-muted)', 'No linked manuscript', 'No DOI/manuscript recorded for this repository.')}
+        : chip('var(--color-text-muted)', 'No linked publication', 'No DOI/publication recorded for this repository.')}
       {n != null && chip('var(--color-text-secondary)', `N up to ${n.toLocaleString()}`, 'Maximum observed sample size across this repository’s variables')}
     </div>
   )
@@ -430,43 +429,6 @@ function Citation({ paper, header }) {
       color: 'var(--color-text-secondary)',
       marginBottom: header ? '8px' : 0,
     }}>{text}</p>
-  )
-}
-
-function PublicationDetails({ paper }) {
-  // Labelled publication-metadata panel for the Overview tab.
-  const { journal, publication_year, volume, issue, pagination, doi, authors } = paper
-  const rows = [
-    ['Authors', authors?.length > 0 ? authors.join(', ') : null],
-    ['Journal', journal],
-    ['Year', publication_year],
-    ['Volume', volume],
-    ['Issue', issue],
-    ['Pages', pagination],
-  ].filter(([, v]) => v)
-
-  if (rows.length === 0 && !doi) return null
-
-  return (
-    <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: '12px 14px', background: 'var(--color-surface-2)' }}>
-      <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
-        Publication
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: '14px', rowGap: '5px', fontSize: '13px' }}>
-        {rows.map(([label, value]) => (
-          <React.Fragment key={label}>
-            <span style={{ color: 'var(--color-text-muted)' }}>{label}</span>
-            <span>{value}</span>
-          </React.Fragment>
-        ))}
-        {doi && (
-          <React.Fragment key="doi">
-            <span style={{ color: 'var(--color-text-muted)' }}>DOI</span>
-            <a href={doi} target="_blank" rel="noopener noreferrer" style={{ wordBreak: 'break-all' }}>{doi} ↗</a>
-          </React.Fragment>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -505,6 +467,9 @@ export default function PapersView({ openPaperReq }) {
   const [hasCode, setHasCode] = useState(false)
   const [minN, setMinN] = useState(null)
   const [minVars, setMinVars] = useState(null)
+  const [journal, setJournal] = useState('')
+  const [year, setYear] = useState('')
+  const [facets, setFacets] = useState({ journals: [], years: [] })
   const [sortBy, setSortBy] = useState('title')
   const [sortDir, setSortDir] = useState('asc')
   const [showFilters, setShowFilters] = useState(false)
@@ -532,17 +497,25 @@ export default function PapersView({ openPaperReq }) {
     if (hasCode) params.has_code = true
     if (minN != null) params.min_n = minN
     if (minVars != null) params.min_vars = minVars
+    if (journal) params.journal = journal
+    if (year) params.year = year
     if (sortBy) { params.sort_by = sortBy; params.sort_dir = sortDir }
     api.papers(params).then(d => {
       setPapers(d.papers || [])
       setTotal(d.total || 0)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [query, hasLabels, hasGT, hasCode, minN, minVars, sortBy, sortDir])
+  }, [query, hasLabels, hasGT, hasCode, minN, minVars, journal, year, sortBy, sortDir])
+
+  // Load journal/year options for the filter dropdowns once.
+  useEffect(() => {
+    api.paperFacets().then(setFacets).catch(() => {})
+  }, [])
 
   const activeFilterCount =
     (hasLabels ? 1 : 0) + (hasGT ? 1 : 0) + (hasCode ? 1 : 0) +
-    (minN != null ? 1 : 0) + (minVars != null ? 1 : 0)
+    (minN != null ? 1 : 0) + (minVars != null ? 1 : 0) +
+    (journal ? 1 : 0) + (year ? 1 : 0)
 
   const clearFilters = () => {
     setHasLabels(false)
@@ -550,6 +523,8 @@ export default function PapersView({ openPaperReq }) {
     setHasCode(false)
     setMinN(null)
     setMinVars(null)
+    setJournal('')
+    setYear('')
   }
 
   const handleSelectPaper = (paper) => {
@@ -636,6 +611,7 @@ export default function PapersView({ openPaperReq }) {
               style={{ flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 'var(--radius)', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
             >
               <option value="title">Sort: Title</option>
+              <option value="year">Sort: Year</option>
               <option value="n_participants">Sort: Participants (N)</option>
               <option value="n_variables">Sort: Variables</option>
               <option value="n_labelled">Sort: Labelled variables</option>
@@ -680,6 +656,32 @@ export default function PapersView({ openPaperReq }) {
                         </button>
                       )}
                     </div>
+                    {facets.journals.length > 0 && (
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                        Journal
+                        <select
+                          value={journal}
+                          onChange={e => setJournal(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                        >
+                          <option value="">Any journal</option>
+                          {facets.journals.map(j => <option key={j} value={j}>{j}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    {facets.years.length > 0 && (
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                        Year
+                        <select
+                          value={year}
+                          onChange={e => setYear(e.target.value)}
+                          style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                        >
+                          <option value="">Any year</option>
+                          {facets.years.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </label>
+                    )}
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
                       Minimum participants (N)
                       <input

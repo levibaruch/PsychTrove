@@ -22,12 +22,16 @@ export const api = {
     if (params.has_code != null) qs.set('has_code', params.has_code)
     if (params.min_n != null) qs.set('min_n', params.min_n)
     if (params.min_vars != null) qs.set('min_vars', params.min_vars)
+    if (params.journal) qs.set('journal', params.journal)
+    if (params.year) qs.set('year', params.year)
     if (params.sort_by) qs.set('sort_by', params.sort_by)
     if (params.sort_dir) qs.set('sort_dir', params.sort_dir)
     if (params.limit) qs.set('limit', params.limit)
     if (params.offset) qs.set('offset', params.offset)
     return request(`/api/papers?${qs}`)
   },
+
+  paperFacets: () => request('/api/papers/facets'),
 
   paper: (paperId) => request(`/api/papers/${encodeURIComponent(paperId)}`),
 
@@ -41,6 +45,8 @@ export const api = {
     if (params.paper_id) qs.set('paper_id', params.paper_id)
     if (params.paper_q) qs.set('paper_q', params.paper_q)
     if (params.min_n != null) qs.set('min_n', params.min_n)
+    if (params.journal) qs.set('journal', params.journal)
+    if (params.year) qs.set('year', params.year)
     if (params.sort_by) qs.set('sort_by', params.sort_by)
     if (params.sort_dir) qs.set('sort_dir', params.sort_dir)
     if (params.limit != null) qs.set('limit', params.limit)

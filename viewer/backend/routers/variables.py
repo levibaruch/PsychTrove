@@ -65,6 +65,8 @@ def _search_variables(
     paper_id: Optional[str],
     paper_q: Optional[str],
     min_n: Optional[int],
+    journal: Optional[str],
+    year: Optional[str],
     sort_by: Optional[str],
     sort_dir: str,
     limit: int,
@@ -97,6 +99,14 @@ def _search_variables(
         if min_n is not None and min_n > 0:
             extra_where.append("v.stat_n IS NOT NULL AND v.stat_n >= %s")
             extra_params.append(min_n)
+
+        if journal:
+            extra_where.append("p.journal = %s")
+            extra_params.append(journal)
+
+        if year:
+            extra_where.append("p.publication_year = %s")
+            extra_params.append(year)
 
         extra_sql = (" AND " + " AND ".join(extra_where)) if extra_where else ""
         order_dir = "DESC" if sort_dir == "desc" else "ASC"
@@ -278,6 +288,8 @@ async def search_variables(
     paper_id: Optional[str] = Query(None),
     paper_q: Optional[str] = Query(None),
     min_n: Optional[int] = Query(None, ge=0),
+    journal: Optional[str] = Query(None),
+    year: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),
     sort_dir: str = Query("asc"),
     limit: int = Query(50, ge=1, le=500),
@@ -288,7 +300,7 @@ async def search_variables(
     result = await loop.run_in_executor(
         None, _search_variables,
         q, col_types, has_description, paper_id, paper_q, min_n,
-        sort_by, sort_dir, limit, offset,
+        journal, year, sort_by, sort_dir, limit, offset,
     )
     return result
 

@@ -33,6 +33,9 @@ export default function VariablesView({ onOpenPaper, onShowHelp }) {
   const [colType, setColType] = useState('')
   const [hasDescription, setHasDescription] = useState(false)
   const [minN, setMinN] = useState(null)
+  const [journal, setJournal] = useState('')
+  const [year, setYear] = useState('')
+  const [facets, setFacets] = useState({ journals: [], years: [] })
 
   const [results, setResults] = useState(null)
   const [total, setTotal] = useState(0)
@@ -54,8 +57,13 @@ export default function VariablesView({ onOpenPaper, onShowHelp }) {
   const debouncedQuery = useDebounce(query, 300)
   const debouncedPaperQuery = useDebounce(paperQuery, 300)
 
+  // Load journal/year options for the filter dropdowns once.
+  useEffect(() => {
+    api.paperFacets().then(setFacets).catch(() => {})
+  }, [])
+
   // Reset to page 1 when filters/query/sort change
-  useEffect(() => { setPage(1) }, [debouncedQuery, debouncedPaperQuery, colType, hasDescription, minN, sortBy, sortDir, pageSize])
+  useEffect(() => { setPage(1) }, [debouncedQuery, debouncedPaperQuery, colType, hasDescription, minN, journal, year, sortBy, sortDir, pageSize])
 
   useEffect(() => {
     if (!debouncedQuery) {
@@ -74,6 +82,8 @@ export default function VariablesView({ onOpenPaper, onShowHelp }) {
     if (hasDescription) params.has_description = true
     if (debouncedPaperQuery) params.paper_q = debouncedPaperQuery
     if (minN != null) params.min_n = minN
+    if (journal) params.journal = journal
+    if (year) params.year = year
     if (sortBy) { params.sort_by = sortBy; params.sort_dir = sortDir }
     api.searchVariables(params).then(d => {
       setResults(d.results || [])
@@ -83,7 +93,7 @@ export default function VariablesView({ onOpenPaper, onShowHelp }) {
       setError(err.message)
       setLoading(false)
     })
-  }, [debouncedQuery, debouncedPaperQuery, colType, hasDescription, minN, page, pageSize, sortBy, sortDir])
+  }, [debouncedQuery, debouncedPaperQuery, colType, hasDescription, minN, journal, year, page, pageSize, sortBy, sortDir])
 
   const handleSort = useCallback((col) => {
     setSortBy(prev => {
@@ -174,6 +184,34 @@ export default function VariablesView({ onOpenPaper, onShowHelp }) {
               {COL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          {facets.journals.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+              <label htmlFor="var-journal-filter" style={{ color: 'var(--color-text-secondary)' }}>Journal:</label>
+              <select
+                id="var-journal-filter"
+                value={journal}
+                onChange={e => setJournal(e.target.value)}
+                style={{ maxWidth: '180px', padding: '4px 8px', borderRadius: 'var(--radius)', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
+              >
+                <option value="">All journals</option>
+                {facets.journals.map(j => <option key={j} value={j}>{j}</option>)}
+              </select>
+            </div>
+          )}
+          {facets.years.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+              <label htmlFor="var-year-filter" style={{ color: 'var(--color-text-secondary)' }}>Year:</label>
+              <select
+                id="var-year-filter"
+                value={year}
+                onChange={e => setYear(e.target.value)}
+                style={{ padding: '4px 8px', borderRadius: 'var(--radius)', fontSize: '12px', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-primary)' }}
+              >
+                <option value="">All years</option>
+                {facets.years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          )}
           <MinNFilter value={minN} onChange={setMinN} />
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
             <input type="checkbox" checked={hasDescription} onChange={e => setHasDescription(e.target.checked)} />
